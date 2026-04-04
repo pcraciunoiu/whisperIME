@@ -247,17 +247,26 @@ public class WhisperInputMethodService extends InputMethodService {
             @Override
             public boolean onTouch(View v, MotionEvent event) {
                 if (event.getAction() == MotionEvent.ACTION_DOWN) {
-                    getCurrentInputConnection().sendKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DEL));
+                    InputConnection icDel = getCurrentInputConnection();
+                    if (icDel != null) {
+                        icDel.sendKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DEL));
+                    }
                     // Post the initial delay of 500ms
                     initialDeleteRunnable = new Runnable() {
                         @Override
                         public void run() {
-                            getCurrentInputConnection().sendKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DEL));
+                            InputConnection ic0 = getCurrentInputConnection();
+                            if (ic0 != null) {
+                                ic0.sendKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DEL));
+                            }
                             // Start repeating every 100ms
                             repeatDeleteRunnable = new Runnable() {
                                 @Override
                                 public void run() {
-                                    getCurrentInputConnection().sendKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DEL));
+                                    InputConnection ic1 = getCurrentInputConnection();
+                                    if (ic1 != null) {
+                                        ic1.sendKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DEL));
+                                    }
                                     handler.postDelayed(this, 100);
                                 }
                             };
@@ -442,7 +451,10 @@ public class WhisperInputMethodService extends InputMethodService {
         });
 
         btnEnter.setOnClickListener(v -> {
-            getCurrentInputConnection().sendKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER));
+            InputConnection ic = getCurrentInputConnection();
+            if (ic != null) {
+                ic.sendKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER));
+            }
         });
 
         btnModeAuto.setOnClickListener(v -> {
@@ -478,20 +490,26 @@ public class WhisperInputMethodService extends InputMethodService {
 
             @Override
             public void onResultReceived(WhisperResult whisperResult) {
-                handler.post(() -> processingBar.setIndeterminate(false));
+                // Whisper invokes this on a worker thread; InputConnection must be used on the main thread.
+                String raw = whisperResult.getResult();
+                if (whisperResult.getLanguage().equals("zh")) {
+                    boolean simpleChinese = sp.getBoolean("simpleChinese", false);
+                    raw = simpleChinese ? ZhConverterUtil.toSimple(raw) : ZhConverterUtil.toTraditional(raw);
+                }
+                final String result = raw;
                 handler.post(() -> {
+                    processingBar.setIndeterminate(false);
                     tvStatus.setText("");
                     tvStatus.setVisibility(View.GONE);
+                    InputConnection ic = getCurrentInputConnection();
+                    boolean commitSuccess = false;
+                    if (ic != null && result.trim().length() > 0) {
+                        commitSuccess = ic.commitText(result.trim() + " ", 1);
+                    }
+                    if (modeAuto && commitSuccess) {
+                        handler.postDelayed(() -> switchToPreviousInputMethod(), 100);
+                    }
                 });
-
-                String result = whisperResult.getResult();
-                if (whisperResult.getLanguage().equals("zh")){
-                    boolean simpleChinese = sp.getBoolean("simpleChinese",false);
-                    result = simpleChinese ? ZhConverterUtil.toSimple(result) : ZhConverterUtil.toTraditional(result);
-                }
-                boolean commitSuccess = false;
-                if (result.trim().length() > 0) commitSuccess = getCurrentInputConnection().commitText(result.trim() + " ",1);
-                if (modeAuto && commitSuccess) handler.postDelayed(() -> switchToPreviousInputMethod(), 100); //slightly delayed, otherwise some apps, e.g. WhatsApp, do not accept the committed text (commitText on inactive InputConnection)
             }
         });
     }
