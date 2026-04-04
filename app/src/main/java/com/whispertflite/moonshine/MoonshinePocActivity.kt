@@ -13,6 +13,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.preference.PreferenceManager
+import com.whispertflite.AsrEnginePreferences
 import com.whispertflite.R
 import com.whispertflite.databinding.ActivityParakeetPocBinding
 import com.whispertflite.utils.HapticFeedback
@@ -35,12 +36,18 @@ class MoonshinePocActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         val sp = PreferenceManager.getDefaultSharedPreferences(this)
-        binding.switchParakeetMain.isChecked = sp.getBoolean(MoonshinePreferences.KEY_USE_MOONSHINE_MAIN, false)
+        binding.switchParakeetMain.isChecked =
+            AsrEnginePreferences.MOONSHINE == AsrEnginePreferences.mainEngine(this)
         binding.switchParakeetIme.isChecked = sp.getBoolean(MoonshinePreferences.KEY_USE_MOONSHINE_IME, false)
         binding.switchParakeetRecognition.isChecked =
             sp.getBoolean(MoonshinePreferences.KEY_USE_MOONSHINE_RECOGNITION, false)
 
         binding.switchParakeetMain.setOnCheckedChangeListener { _, v ->
+            if (v) {
+                AsrEnginePreferences.setMainEngine(this, AsrEnginePreferences.MOONSHINE)
+            } else {
+                AsrEnginePreferences.setMainEngine(this, AsrEnginePreferences.WHISPER)
+            }
             sp.edit().putBoolean(MoonshinePreferences.KEY_USE_MOONSHINE_MAIN, v).apply()
         }
         binding.switchParakeetIme.setOnCheckedChangeListener { _, v ->

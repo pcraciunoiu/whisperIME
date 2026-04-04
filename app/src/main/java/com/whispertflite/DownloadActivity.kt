@@ -7,10 +7,13 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.preference.PreferenceManager
 import com.whispertflite.databinding.ActivityDownloadBinding
-import com.whispertflite.moonshine.MoonshineConstants
+import android.content.SharedPreferences
 import com.whispertflite.moonshine.MoonshineDownloader
 import com.whispertflite.moonshine.MoonshineModelFiles
 import com.whispertflite.moonshine.MoonshinePreferences
+import com.whispertflite.parakeet.ParakeetDownloader
+import com.whispertflite.parakeet.ParakeetModelFiles
+import com.whispertflite.parakeet.ParakeetPreferences
 import com.whispertflite.utils.Downloader
 import com.whispertflite.utils.ThemeUtils
 
@@ -26,95 +29,154 @@ class DownloadActivity : AppCompatActivity() {
 
         val sp = PreferenceManager.getDefaultSharedPreferences(this)
         MoonshinePreferences.migrateFromParakeetKeys(this)
-        val moonshineWizard = sp.getBoolean(MoonshinePreferences.KEY_SETUP_WIZARD_MOONSHINE, false) ||
-            sp.getBoolean("setupWizardParakeet", false)
-        if (moonshineWizard) {
-            binding?.radioMoonshine?.isChecked = true
-        } else {
-            binding?.radioWhisper?.isChecked = true
-        }
-        applyWizardDescription(moonshineWizard)
+
+        val fromIntent = intent.getStringExtra(EXTRA_PREFERRED_ENGINE)
+        val wizard = AsrEnginePreferences.setupWizardEngine(this)
+            ?: legacyWizardEngine(sp)
+        val initial = fromIntent ?: wizard ?: AsrEnginePreferences.WHISPER
+        checkRadioForEngine(initial)
+        AsrEnginePreferences.setSetupWizardEngine(this, initial)
+        applyWizardDescription(initial)
 
         binding?.modelChoiceGroup?.setOnCheckedChangeListener { _, checkedId ->
-            val useMoonshine = checkedId == R.id.radio_moonshine
-            sp.edit().putBoolean(MoonshinePreferences.KEY_SETUP_WIZARD_MOONSHINE, useMoonshine).apply()
-            if (!useMoonshine) {
-                sp.edit().remove("setupWizardParakeet").apply()
-            }
-            applyWizardDescription(useMoonshine)
+            val eng = engineForRadioId(checkedId)
+            AsrEnginePreferences.setSetupWizardEngine(this, eng)
+            applyWizardDescription(eng)
         }
     }
 
-    private fun applyWizardDescription(moonshine: Boolean) {
+    private fun legacyWizardEngine(sp: SharedPreferences): String? = when {
+        sp.getBoolean(MoonshinePreferences.KEY_SETUP_WIZARD_MOONSHINE, false) -> AsrEnginePreferences.MOONSHINE
+        sp.getBoolean(ParakeetPreferences.KEY_SETUP_WIZARD_PARAKEET, false) -> AsrEnginePreferences.PARAKEET
+        sp.getBoolean("setupWizardParakeet", false) -> AsrEnginePreferences.PARAKEET
+        else -> null
+    }
+
+    private fun checkRadioForEngine(engine: String) {
+        when (engine) {
+            AsrEnginePreferences.PARAKEET -> binding?.radioParakeet?.isChecked = true
+            AsrEnginePreferences.MOONSHINE -> binding?.radioMoonshine?.isChecked = true
+            else -> binding?.radioWhisper?.isChecked = true
+        }
+    }
+
+    private fun engineForRadioId(checkedId: Int): String = when (checkedId) {
+        R.id.radio_parakeet -> AsrEnginePreferences.PARAKEET
+        R.id.radio_moonshine -> AsrEnginePreferences.MOONSHINE
+        else -> AsrEnginePreferences.WHISPER
+    }
+
+    private fun selectedEngine(): String = when {
+        binding?.radioParakeet?.isChecked == true -> AsrEnginePreferences.PARAKEET
+        binding?.radioMoonshine?.isChecked == true -> AsrEnginePreferences.MOONSHINE
+        else -> AsrEnginePreferences.WHISPER
+    }
+
+    private fun applyWizardDescription(engine: String) {
         binding?.downloadModelDesc?.setText(
-            if (moonshine) R.string.download_model_text_moonshine else R.string.download_model_text,
+            when (engine) {
+                AsrEnginePreferences.PARAKEET -> R.string.download_model_text_parakeet
+                AsrEnginePreferences.MOONSHINE -> R.string.download_model_text_moonshine
+                else -> R.string.download_model_text
+            },
         )
     }
 
     override fun onResume() {
         super.onResume()
         Downloader.copyAssetsToSdcard(this)
-        val sp = PreferenceManager.getDefaultSharedPreferences(this)
         MoonshinePreferences.migrateFromParakeetKeys(this)
-        val moonshineWizard = sp.getBoolean(MoonshinePreferences.KEY_SETUP_WIZARD_MOONSHINE, false) ||
-            sp.getBoolean("setupWizardParakeet", false)
-        if (moonshineWizard) {
-            if (MoonshineModelFiles.allModelFilesPresent(this)) {
-                sp.edit()
-                    .putBoolean(MoonshinePreferences.KEY_USE_MOONSHINE_MAIN, true)
-                    .putString("modelName", MoonshineConstants.MAIN_SCREEN_SPINNER_SENTINEL)
-                    .apply()
-                binding?.downloadProgress?.progress = 100
-                binding?.downloadProgress?.visibility = View.VISIBLE
-                binding?.buttonStart?.visibility = View.VISIBLE
-                binding?.buttonUpdate?.visibility = View.GONE
-                startActivity(Intent(this, MainActivity::class.java))
-                finish()
+        val wizard = AsrEnginePreferences.setupWizardEngine(this) ?: selectedEngine()
+
+        when (wizard) {
+            AsrEnginePreferences.MOONSHINE -> {
+                if (MoonshineModelFiles.allModelFilesPresent(this)) {
+                    AsrEnginePreferences.setMainEngine(this, AsrEnginePreferences.MOONSHINE)
+                    showReadyAndGoMain()
+                }
             }
-        } else {
-            if (Downloader.checkModels(this)) {
-                binding?.downloadProgress?.progress = 100
-                binding?.downloadProgress?.visibility = View.VISIBLE
-                binding?.buttonStart?.visibility = View.VISIBLE
-                if (!Downloader.checkUpdate(this)) {
-                    val intent = Intent(this, MainActivity::class.java)
-                    startActivity(intent)
-                    finish()
-                } else {
-                    binding?.buttonUpdate?.visibility = View.VISIBLE
+            AsrEnginePreferences.PARAKEET -> {
+                val dir = getExternalFilesDir(null)
+                if (dir != null && ParakeetModelFiles.allOnnxPresent(dir)) {
+                    AsrEnginePreferences.setMainEngine(this, AsrEnginePreferences.PARAKEET)
+                    showReadyAndGoMain()
+                }
+            }
+            else -> {
+                if (Downloader.checkModels(this)) {
+                    AsrEnginePreferences.setMainEngine(this, AsrEnginePreferences.WHISPER)
+                    binding?.downloadProgress?.progress = 100
+                    binding?.downloadProgress?.visibility = View.VISIBLE
+                    binding?.buttonStart?.visibility = View.VISIBLE
+                    if (!Downloader.checkUpdate(this)) {
+                        startActivity(Intent(this, MainActivity::class.java))
+                        finish()
+                    } else {
+                        binding?.buttonUpdate?.visibility = View.VISIBLE
+                    }
                 }
             }
         }
     }
 
+    private fun showReadyAndGoMain() {
+        binding?.downloadProgress?.progress = 100
+        binding?.downloadProgress?.visibility = View.VISIBLE
+        binding?.buttonStart?.visibility = View.VISIBLE
+        binding?.buttonUpdate?.visibility = View.GONE
+        startActivity(Intent(this, MainActivity::class.java))
+        finish()
+    }
+
     fun download(view: View) {
-        val useMoonshine = binding?.radioMoonshine?.isChecked == true
+        val engine = selectedEngine()
         binding?.downloadSize?.visibility = View.VISIBLE
         binding?.downloadProgress?.visibility = View.VISIBLE
         binding?.buttonStart?.visibility = View.INVISIBLE
-        if (useMoonshine) {
-            binding?.buttonUpdate?.visibility = View.GONE
-            MoonshineDownloader.downloadMoonshineBaseModels(
-                this,
-                binding?.downloadProgress,
-                binding?.downloadSize,
-                Runnable {
-                    PreferenceManager.getDefaultSharedPreferences(this).edit()
-                        .putBoolean(MoonshinePreferences.KEY_USE_MOONSHINE_MAIN, true)
-                        .putString("modelName", MoonshineConstants.MAIN_SCREEN_SPINNER_SENTINEL)
-                        .apply()
-                    binding?.downloadProgress?.progress = 100
-                    binding?.buttonStart?.visibility = View.VISIBLE
-                },
-            )
-        } else {
-            Downloader.downloadModels(this, binding!!)
+        when (engine) {
+            AsrEnginePreferences.MOONSHINE -> {
+                binding?.buttonUpdate?.visibility = View.GONE
+                MoonshineDownloader.downloadMoonshineBaseModels(
+                    this,
+                    binding?.downloadProgress,
+                    binding?.downloadSize,
+                    Runnable {
+                        val sp = PreferenceManager.getDefaultSharedPreferences(this)
+                        if (MoonshineModelFiles.allModelFilesPresent(this)) {
+                            AsrEnginePreferences.setMainEngine(this, AsrEnginePreferences.MOONSHINE)
+                            sp.edit().putBoolean(MoonshinePreferences.KEY_USE_MOONSHINE_MAIN, true).apply()
+                        }
+                        binding?.downloadProgress?.progress = 100
+                        binding?.buttonStart?.visibility = View.VISIBLE
+                    },
+                )
+            }
+            AsrEnginePreferences.PARAKEET -> {
+                binding?.buttonUpdate?.visibility = View.GONE
+                ParakeetDownloader.downloadParakeetModels(
+                    this,
+                    binding?.downloadProgress,
+                    binding?.downloadSize,
+                    Runnable {
+                        val dir = getExternalFilesDir(null)
+                        if (dir != null && ParakeetModelFiles.allOnnxPresent(dir)) {
+                            AsrEnginePreferences.setMainEngine(this, AsrEnginePreferences.PARAKEET)
+                            PreferenceManager.getDefaultSharedPreferences(this).edit()
+                                .putBoolean(com.whispertflite.parakeet.ParakeetPreferences.KEY_USE_PARAKEET_MAIN, true)
+                                .apply()
+                        }
+                        binding?.downloadProgress?.progress = 100
+                        binding?.buttonStart?.visibility = View.VISIBLE
+                    },
+                )
+            }
+            else -> Downloader.downloadModels(this, binding!!)
         }
     }
 
     fun startMain(view: View) {
-        val intent = Intent(this, MainActivity::class.java)
-        startActivity(intent)
+        AsrEnginePreferences.setMainEngine(this, selectedEngine())
+        startActivity(Intent(this, MainActivity::class.java))
         finish()
     }
 
@@ -125,5 +187,9 @@ class DownloadActivity : AppCompatActivity() {
         binding?.buttonUpdate?.visibility = View.GONE
         Downloader.deleteOldModels(this)
         Downloader.downloadModels(this, binding!!)
+    }
+
+    companion object {
+        const val EXTRA_PREFERRED_ENGINE = "preferredEngine"
     }
 }

@@ -43,4 +43,14 @@
         <item>zh</item>
     </string-array>
 
+    <string-array name="asr_engine_entry_values" translatable="false">
+        <item>whisper</item>
+        <item>parakeet</item>
+        <item>moonshine</item>
+    </string-array>
+    <string-array name="asr_engine_entries">
+        <item>@string/engine_whisper</item>
+        <item>@string/engine_parakeet</item>
+        <item>@string/engine_moonshine</item>
+    </string-array>
 </resources>

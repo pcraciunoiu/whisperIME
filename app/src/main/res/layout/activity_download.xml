@@ -40,8 +40,8 @@
                 android:layout_height="wrap_content"
                 android:layout_marginStart="16dp"
                 android:layout_marginEnd="16dp"
-                android:gravity="center"
-                android:orientation="horizontal">
+                android:gravity="center_horizontal"
+                android:orientation="vertical">
 
                 <RadioButton
                     android:id="@+id/radio_whisper"
@@ -51,10 +51,15 @@
                     android:text="@string/model_choice_whisper" />
 
                 <RadioButton
+                    android:id="@+id/radio_parakeet"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/model_choice_parakeet" />
+
+                <RadioButton
                     android:id="@+id/radio_moonshine"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="16dp"
                     android:text="@string/model_choice_moonshine" />
             </RadioGroup>
 

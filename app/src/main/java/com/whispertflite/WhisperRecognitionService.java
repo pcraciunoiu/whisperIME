@@ -32,6 +32,8 @@ import com.whispertflite.asr.WhisperResult;
 import com.whispertflite.moonshine.MoonshineHoldRecorder;
 import com.whispertflite.moonshine.MoonshineModelFiles;
 import com.whispertflite.moonshine.MoonshinePreferences;
+import com.whispertflite.parakeet.ParakeetModelFiles;
+import com.whispertflite.parakeet.ParakeetStreamingRecorder;
 import com.whispertflite.utils.HapticFeedback;
 import com.whispertflite.utils.InputLang;
 
@@ -47,6 +49,7 @@ public class WhisperRecognitionService extends RecognitionService {
     private boolean recognitionCancelled = false;
     private SharedPreferences sp = null;
     private MoonshineHoldRecorder moonshineRecognitionRecorder = null;
+    private ParakeetStreamingRecorder parakeetRecognitionRecorder = null;
 
     @Override
     protected void onStartListening(Intent recognizerIntent, Callback callback) {
@@ -70,7 +73,8 @@ public class WhisperRecognitionService extends RecognitionService {
         sdcardDataFolder = this.getExternalFilesDir(null);
         selectedTfliteFile = new File(sdcardDataFolder, sp.getString("recognitionServiceModelName", MULTI_LINGUAL_TOP_WORLD_SLOW));
 
-        boolean useMoonshine = MoonshinePreferences.useMoonshineRecognition(this)
+        String eng = AsrEnginePreferences.mainEngine(this);
+        boolean useMoonshine = AsrEnginePreferences.MOONSHINE.equals(eng)
                 && MoonshineModelFiles.allModelFilesPresent(this);
 
         if (useMoonshine) {
@@ -95,6 +99,39 @@ public class WhisperRecognitionService extends RecognitionService {
                 }
             } else {
                 moonshineRecognitionRecorder = null;
+                try {
+                    callback.error(ERROR_CLIENT);
+                } catch (RemoteException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+            return;
+        }
+
+        boolean useParakeet = AsrEnginePreferences.PARAKEET.equals(eng)
+                && ParakeetModelFiles.allOnnxPresent(sdcardDataFolder);
+        if (useParakeet) {
+            Handler mainHandler = new Handler(Looper.getMainLooper());
+            parakeetRecognitionRecorder = new ParakeetStreamingRecorder(this, sdcardDataFolder, mainHandler,
+                    partial -> {
+                        try {
+                            Bundle b = new Bundle();
+                            ArrayList<String> al = new ArrayList<>();
+                            al.add(partial);
+                            b.putStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION, al);
+                            callback.partialResults(b);
+                        } catch (RemoteException e) {
+                            throw new RuntimeException(e);
+                        }
+                    });
+            if (parakeetRecognitionRecorder.start()) {
+                try {
+                    callback.beginningOfSpeech();
+                } catch (RemoteException e) {
+                    throw new RuntimeException(e);
+                }
+            } else {
+                parakeetRecognitionRecorder = null;
                 try {
                     callback.error(ERROR_CLIENT);
                 } catch (RemoteException e) {
@@ -168,6 +205,10 @@ public class WhisperRecognitionService extends RecognitionService {
             moonshineRecognitionRecorder.stop();
             moonshineRecognitionRecorder = null;
         }
+        if (parakeetRecognitionRecorder != null) {
+            parakeetRecognitionRecorder.stop();
+            parakeetRecognitionRecorder = null;
+        }
         stopRecording();
         deinitModel();
         recognitionCancelled = true;
@@ -179,6 +220,21 @@ public class WhisperRecognitionService extends RecognitionService {
         if (moonshineRecognitionRecorder != null) {
             String fin = moonshineRecognitionRecorder.stop();
             moonshineRecognitionRecorder = null;
+            try {
+                callback.endOfSpeech();
+                Bundle results = new Bundle();
+                ArrayList<String> resultList = new ArrayList<>();
+                resultList.add(fin.trim());
+                results.putStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION, resultList);
+                callback.results(results);
+            } catch (RemoteException e) {
+                throw new RuntimeException(e);
+            }
+            return;
+        }
+        if (parakeetRecognitionRecorder != null) {
+            String fin = parakeetRecognitionRecorder.stop();
+            parakeetRecognitionRecorder = null;
             try {
                 callback.endOfSpeech();
                 Bundle results = new Bundle();

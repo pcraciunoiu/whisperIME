@@ -37,6 +37,8 @@ import com.whispertflite.asr.WhisperResult;
 import com.whispertflite.moonshine.MoonshineHoldRecorder;
 import com.whispertflite.moonshine.MoonshineModelFiles;
 import com.whispertflite.moonshine.MoonshinePreferences;
+import com.whispertflite.parakeet.ParakeetModelFiles;
+import com.whispertflite.parakeet.ParakeetStreamingRecorder;
 import com.whispertflite.utils.HapticFeedback;
 import com.whispertflite.utils.InputLang;
 
@@ -64,9 +66,17 @@ public class WhisperInputMethodService extends InputMethodService {
     private boolean modeAuto = false;
     private LinearLayout layoutButtons;
     private MoonshineHoldRecorder imeMoonshineRecorder = null;
+    private ParakeetStreamingRecorder imeParakeetRecorder = null;
 
     private boolean useMoonshineImeNow() {
-        return MoonshinePreferences.useMoonshineIme(this) && MoonshineModelFiles.allModelFilesPresent(this);
+        return AsrEnginePreferences.MOONSHINE.equals(AsrEnginePreferences.mainEngine(this))
+                && MoonshineModelFiles.allModelFilesPresent(this);
+    }
+
+    private boolean useParakeetImeNow() {
+        return AsrEnginePreferences.PARAKEET.equals(AsrEnginePreferences.mainEngine(this))
+                && sdcardDataFolder != null
+                && ParakeetModelFiles.allOnnxPresent(sdcardDataFolder);
     }
 
     @Override
@@ -82,6 +92,10 @@ public class WhisperInputMethodService extends InputMethodService {
             imeMoonshineRecorder.stop();
             imeMoonshineRecorder = null;
         }
+        if (imeParakeetRecorder != null) {
+            imeParakeetRecorder.stop();
+            imeParakeetRecorder = null;
+        }
         deinitModel();
         if (mRecorder != null && mRecorder.isInProgress()) {
             mRecorder.stop();
@@ -91,31 +105,62 @@ public class WhisperInputMethodService extends InputMethodService {
 
     @Override
     public void onStartInput(EditorInfo attribute, boolean restarting) {
-        if (attribute.inputType ==  EditorInfo.TYPE_NULL) {
-            Log.d(TAG, "Cancelling: onStartInput: inputType=" + attribute.inputType + ", package=" + attribute.packageName + ", fieldId=" + attribute.fieldId);
-            deinitModel();
+        if (attribute.inputType == EditorInfo.TYPE_NULL) {
+            Log.d(TAG, "onStartInput TYPE_NULL package=" + attribute.packageName + " — stop recording only (keep model loaded)");
             if (mRecorder != null && mRecorder.isInProgress()) {
                 mRecorder.stop();
+            }
+            if (imeMoonshineRecorder != null) {
+                imeMoonshineRecorder.stop();
+                imeMoonshineRecorder = null;
+            }
+            if (imeParakeetRecorder != null) {
+                imeParakeetRecorder.stop();
+                imeParakeetRecorder = null;
             }
         }
     }
 
     @Override
     public void onStartInputView(EditorInfo attribute, boolean restarting){
+        MoonshinePreferences.migrateFromParakeetKeys(this);
         selectedTfliteFile = new File(sdcardDataFolder, sp.getString("modelName", MULTI_LINGUAL_TOP_WORLD_SLOW));
+        String eng = AsrEnginePreferences.mainEngine(this);
 
-        if (useMoonshineImeNow()) {
+        if (AsrEnginePreferences.MOONSHINE.equals(eng)) {
             deinitModel();
-        } else if (!selectedTfliteFile.exists()) {
-            switchToPreviousInputMethod();  //switch back and download models first
+            if (!MoonshineModelFiles.allModelFilesPresent(this)) {
+                switchToPreviousInputMethod();
+                Intent intent = new Intent(this, DownloadActivity.class);
+                intent.putExtra(DownloadActivity.EXTRA_PREFERRED_ENGINE, AsrEnginePreferences.MOONSHINE);
+                intent.addFlags(FLAG_ACTIVITY_NEW_TASK);
+                startActivity(intent);
+            }
+            return;
+        }
+        if (AsrEnginePreferences.PARAKEET.equals(eng)) {
+            deinitModel();
+            if (sdcardDataFolder == null || !ParakeetModelFiles.allOnnxPresent(sdcardDataFolder)) {
+                switchToPreviousInputMethod();
+                Intent intent = new Intent(this, DownloadActivity.class);
+                intent.putExtra(DownloadActivity.EXTRA_PREFERRED_ENGINE, AsrEnginePreferences.PARAKEET);
+                intent.addFlags(FLAG_ACTIVITY_NEW_TASK);
+                startActivity(intent);
+            }
+            return;
+        }
+
+        if (!selectedTfliteFile.exists()) {
+            switchToPreviousInputMethod();
             Intent intent = new Intent(this, DownloadActivity.class);
+            intent.putExtra(DownloadActivity.EXTRA_PREFERRED_ENGINE, AsrEnginePreferences.WHISPER);
             intent.addFlags(FLAG_ACTIVITY_NEW_TASK);
             startActivity(intent);
         } else {
-            if (mWhisper == null)
+            if (mWhisper == null) {
                 initModel(selectedTfliteFile);
-            else {
-                if (!mWhisper.getCurrentModelPath().equals(selectedTfliteFile.getAbsolutePath())){
+            } else {
+                if (!mWhisper.getCurrentModelPath().equals(selectedTfliteFile.getAbsolutePath())) {
                     deinitModel();
                     initModel(selectedTfliteFile);
                 }
@@ -138,6 +183,12 @@ public class WhisperInputMethodService extends InputMethodService {
         processingBar = view.findViewById(R.id.processing_bar);
         tvStatus = view.findViewById(R.id.tv_status);
         sdcardDataFolder = this.getExternalFilesDir(null);
+        MoonshinePreferences.migrateFromParakeetKeys(this);
+        selectedTfliteFile = new File(sdcardDataFolder, sp.getString("modelName", MULTI_LINGUAL_TOP_WORLD_SLOW));
+        if (AsrEnginePreferences.WHISPER.equals(AsrEnginePreferences.mainEngine(this))
+                && selectedTfliteFile.isFile() && mWhisper == null) {
+            initModel(selectedTfliteFile);
+        }
         btnTranslate.setImageResource(translate ? R.drawable.ic_english_on_36dp : R.drawable.ic_english_off_36dp);
         modeAuto = sp.getBoolean("imeModeAuto",false);
         btnModeAuto.setImageResource(modeAuto ? R.drawable.ic_auto_on_36dp : R.drawable.ic_auto_off_36dp);
@@ -169,7 +220,7 @@ public class WhisperInputMethodService extends InputMethodService {
 
         });
 
-        if (modeAuto && !useMoonshineImeNow()) {
+        if (modeAuto && AsrEnginePreferences.WHISPER.equals(AsrEnginePreferences.mainEngine(this))) {
             layoutButtons.setVisibility(View.GONE);
             HapticFeedback.vibrate(this);
             startRecording();
@@ -276,10 +327,66 @@ public class WhisperInputMethodService extends InputMethodService {
                 }
                 return true;
             }
+            if (useParakeetImeNow()) {
+                if (event.getAction() == MotionEvent.ACTION_DOWN) {
+                    handler.post(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background_pressed));
+                    if (checkRecordPermission()) {
+                        HapticFeedback.vibrate(this);
+                        imeParakeetRecorder = new ParakeetStreamingRecorder(this, sdcardDataFolder, handler,
+                                partial -> handler.post(() -> {
+                                    InputConnection ic = getCurrentInputConnection();
+                                    if (ic != null) ic.setComposingText(partial, 1);
+                                }));
+                        if (!imeParakeetRecorder.start()) {
+                            imeParakeetRecorder = null;
+                        }
+                        handler.post(() -> processingBar.setProgress(100));
+                        countDownTimer = new CountDownTimer(30000, 1000) {
+                            @Override
+                            public void onTick(long l) {
+                                handler.post(() -> processingBar.setProgress((int) (l / 300)));
+                            }
+                            @Override
+                            public void onFinish() {}
+                        };
+                        countDownTimer.start();
+                        handler.post(() -> {
+                            tvStatus.setText("");
+                            tvStatus.setVisibility(View.GONE);
+                        });
+                    }
+                } else if (event.getAction() == MotionEvent.ACTION_UP) {
+                    handler.post(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background));
+                    if (countDownTimer != null) countDownTimer.cancel();
+                    handler.post(() -> processingBar.setProgress(0));
+                    if (imeParakeetRecorder != null) {
+                        String fin = imeParakeetRecorder.stop();
+                        imeParakeetRecorder = null;
+                        handler.post(() -> {
+                            InputConnection ic = getCurrentInputConnection();
+                            if (ic != null) {
+                                ic.finishComposingText();
+                                if (fin.trim().length() > 0) ic.commitText(fin.trim() + " ", 1);
+                            }
+                        });
+                    }
+                }
+                return true;
+            }
             if (event.getAction() == MotionEvent.ACTION_DOWN) {
                 // Pressed
                 handler.post(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background_pressed));
                 if (checkRecordPermission()){
+                    if (mWhisper == null && selectedTfliteFile != null && selectedTfliteFile.isFile()) {
+                        initModel(selectedTfliteFile);
+                    }
+                    if (mWhisper == null) {
+                        handler.post(() -> {
+                            tvStatus.setText(getString(R.string.whisper_model_missing));
+                            tvStatus.setVisibility(View.VISIBLE);
+                        });
+                        return true;
+                    }
                     if (!mWhisper.isInProgress()) {
                         HapticFeedback.vibrate(this);
                         startRecording();
@@ -318,6 +425,10 @@ public class WhisperInputMethodService extends InputMethodService {
             if (imeMoonshineRecorder != null) {
                 imeMoonshineRecorder.stop();
                 imeMoonshineRecorder = null;
+            }
+            if (imeParakeetRecorder != null) {
+                imeParakeetRecorder.stop();
+                imeParakeetRecorder = null;
             }
             if (mWhisper != null) stopTranscription();
             switchToPreviousInputMethod();

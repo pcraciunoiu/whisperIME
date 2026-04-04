@@ -19,6 +19,27 @@
                 android:layout_height="wrap_content"
                 android:textSize="16sp"
                 android:textColor="@color/colorAccent"
+                android:text="@string/asr_engine" />
+
+            <Spinner
+                android:id="@+id/spnrAsrEngine"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/layout_whisper_models"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="10dp"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="16sp"
+                android:textColor="@color/colorAccent"
                 android:text="@string/select_model" />
 
             <Spinner

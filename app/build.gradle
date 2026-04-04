@@ -52,6 +52,14 @@ android {
         // Disable including dependency metadata when building Android App Bundles
         includeInBundle = false
     }
+
+    // Parakeet (MS ORT) and moonshine-voice both ship libonnxruntime.so — keep one copy.
+    packaging {
+        jniLibs {
+            pickFirsts += ['lib/arm64-v8a/libonnxruntime.so']
+            pickFirsts += ['lib/armeabi-v7a/libonnxruntime.so']
+        }
+    }
 }
 
 dependencies {
@@ -64,6 +72,7 @@ dependencies {
 
     implementation 'ai.moonshine:moonshine-voice:0.0.51'
     implementation 'org.apache.commons:commons-compress:1.27.1'
+    implementation 'com.microsoft.onnxruntime:onnxruntime-android:1.19.2'
 
     // Main TensorFlow Lite library
     //noinspection GradleDependency: Crash with 2.16.1, nonsense output with com.google.ai.edge.litert:litert:1.0.1

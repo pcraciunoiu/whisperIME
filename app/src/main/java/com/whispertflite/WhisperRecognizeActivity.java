@@ -36,6 +36,8 @@ import com.whispertflite.asr.WhisperResult;
 import com.whispertflite.moonshine.MoonshineHoldRecorder;
 import com.whispertflite.moonshine.MoonshineModelFiles;
 import com.whispertflite.moonshine.MoonshinePreferences;
+import com.whispertflite.parakeet.ParakeetModelFiles;
+import com.whispertflite.parakeet.ParakeetStreamingRecorder;
 import com.whispertflite.utils.HapticFeedback;
 import com.whispertflite.utils.InputLang;
 
@@ -57,8 +59,11 @@ public class WhisperRecognizeActivity extends AppCompatActivity {
     private CountDownTimer countDownTimer;
     private boolean modeAuto = false;
     private MoonshineHoldRecorder moonshineOverlayRecorder = null;
+    private ParakeetStreamingRecorder parakeetOverlayRecorder = null;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private boolean moonshineOverlayMode = false;
+    private boolean parakeetOverlayMode = false;
+    private int overlayLangToken = -1;
 
     @SuppressLint("ClickableViewAccessibility")
     @Override
@@ -69,10 +74,15 @@ public class WhisperRecognizeActivity extends AppCompatActivity {
         MoonshinePreferences.migrateFromParakeetKeys(this);
         sdcardDataFolder = this.getExternalFilesDir(null);
         selectedTfliteFile = new File(sdcardDataFolder, sp.getString("modelName", MULTI_LINGUAL_TOP_WORLD_SLOW));
-        moonshineOverlayMode = MoonshinePreferences.useMoonshineMain(mContext)
+        String mainEng = AsrEnginePreferences.mainEngine(mContext);
+        moonshineOverlayMode = AsrEnginePreferences.MOONSHINE.equals(mainEng)
                 && MoonshineModelFiles.allModelFilesPresent(mContext);
-        if (!moonshineOverlayMode && !selectedTfliteFile.exists()) {
+        parakeetOverlayMode = AsrEnginePreferences.PARAKEET.equals(mainEng)
+                && sdcardDataFolder != null
+                && ParakeetModelFiles.allOnnxPresent(sdcardDataFolder);
+        if (!moonshineOverlayMode && !parakeetOverlayMode && !selectedTfliteFile.exists()) {
             Intent intent = new Intent(this, DownloadActivity.class);
+            intent.putExtra(DownloadActivity.EXTRA_PREFERRED_ENGINE, AsrEnginePreferences.WHISPER);
             intent.addFlags(FLAG_ACTIVITY_NEW_TASK);
             startActivity(intent);
             finish();
@@ -90,9 +100,10 @@ public class WhisperRecognizeActivity extends AppCompatActivity {
         } else {
             Log.d("WhisperRecognition","StartListening, no language specified");
         }
+        overlayLangToken = langToken;
 
-        if (!moonshineOverlayMode) {
-            initModel(selectedTfliteFile, langToken);
+        if (!moonshineOverlayMode && !parakeetOverlayMode) {
+            initModel(selectedTfliteFile, overlayLangToken);
         }
 
         setContentView(R.layout.activity_recognize);
@@ -135,7 +146,7 @@ public class WhisperRecognizeActivity extends AppCompatActivity {
 
         });
 
-        if (modeAuto && !moonshineOverlayMode) {
+        if (modeAuto && !moonshineOverlayMode && !parakeetOverlayMode) {
             btnRecord.setVisibility(View.GONE);
             HapticFeedback.vibrate(this);
             startRecording();
@@ -164,6 +175,41 @@ public class WhisperRecognizeActivity extends AppCompatActivity {
         });
 
         btnRecord.setOnTouchListener((v, event) -> {
+            if (parakeetOverlayMode) {
+                if (event.getAction() == MotionEvent.ACTION_DOWN) {
+                    runOnUiThread(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background_pressed));
+                    if (checkRecordPermission()) {
+                        HapticFeedback.vibrate(this);
+                        parakeetOverlayRecorder = new ParakeetStreamingRecorder(mContext, sdcardDataFolder, mainHandler,
+                                partial -> { });
+                        if (!parakeetOverlayRecorder.start()) {
+                            parakeetOverlayRecorder = null;
+                            Toast.makeText(mContext, R.string.parakeet_start_failed, Toast.LENGTH_SHORT).show();
+                        }
+                        runOnUiThread(() -> processingBar.setProgress(100));
+                        countDownTimer = new CountDownTimer(30000, 1000) {
+                            @Override
+                            public void onTick(long l) {
+                                runOnUiThread(() -> processingBar.setProgress((int) (l / 300)));
+                            }
+                            @Override
+                            public void onFinish() {}
+                        };
+                        countDownTimer.start();
+                    }
+                } else if (event.getAction() == MotionEvent.ACTION_UP) {
+                    runOnUiThread(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background));
+                    if (countDownTimer != null) countDownTimer.cancel();
+                    runOnUiThread(() -> processingBar.setProgress(0));
+                    if (parakeetOverlayRecorder != null) {
+                        String fin = parakeetOverlayRecorder.stop();
+                        parakeetOverlayRecorder = null;
+                        if (fin.trim().length() > 0) sendResult(fin.trim());
+                        else Toast.makeText(mContext, R.string.error_no_input, Toast.LENGTH_SHORT).show();
+                    }
+                }
+                return true;
+            }
             if (moonshineOverlayMode) {
                 if (event.getAction() == MotionEvent.ACTION_DOWN) {
                     runOnUiThread(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background_pressed));
@@ -203,6 +249,13 @@ public class WhisperRecognizeActivity extends AppCompatActivity {
                 // Pressed
                 runOnUiThread(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background_pressed));
                 if (checkRecordPermission()){
+                    if (mWhisper == null && selectedTfliteFile.isFile()) {
+                        initModel(selectedTfliteFile, overlayLangToken);
+                    }
+                    if (mWhisper == null) {
+                        Toast.makeText(mContext, R.string.whisper_model_missing, Toast.LENGTH_SHORT).show();
+                        return true;
+                    }
                     if (!mWhisper.isInProgress()) {
                         HapticFeedback.vibrate(this);
                         startRecording();
@@ -234,6 +287,10 @@ public class WhisperRecognizeActivity extends AppCompatActivity {
             if (moonshineOverlayRecorder != null) {
                 moonshineOverlayRecorder.stop();
                 moonshineOverlayRecorder = null;
+            }
+            if (parakeetOverlayRecorder != null) {
+                parakeetOverlayRecorder.stop();
+                parakeetOverlayRecorder = null;
             }
             if (mWhisper != null) stopTranscription();
             setResult(RESULT_CANCELED, null);
@@ -325,6 +382,10 @@ public class WhisperRecognizeActivity extends AppCompatActivity {
         if (moonshineOverlayRecorder != null) {
             moonshineOverlayRecorder.stop();
             moonshineOverlayRecorder = null;
+        }
+        if (parakeetOverlayRecorder != null) {
+            parakeetOverlayRecorder.stop();
+            parakeetOverlayRecorder = null;
         }
         deinitModel();
         if (mRecorder != null && mRecorder.isInProgress()) {

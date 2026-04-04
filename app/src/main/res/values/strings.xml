@@ -8,8 +8,17 @@
     <string name="download_model_text">\nDownload Whisper models from Hugging Face (~435 MB)</string>
     <string name="download_model_text_moonshine">\nDownload Moonshine Base English models from the project release (examples tarball). English ASR only; separate from Whisper.</string>
     <string name="model_choice_whisper">Whisper (TFLite)</string>
+    <string name="model_choice_parakeet">Parakeet (ONNX)</string>
     <string name="model_choice_moonshine">Moonshine Base (English)</string>
     <string name="wizard_model_type">Model type</string>
+    <string name="asr_engine">Speech engine</string>
+    <string name="engine_whisper">Whisper (TFLite)</string>
+    <string name="engine_parakeet">Parakeet (ONNX, English)</string>
+    <string name="engine_moonshine">Moonshine Base (English)</string>
+    <string name="download_model_text_parakeet">\nDownload Parakeet ONNX models from Hugging Face (~650 MB). English streaming.</string>
+    <string name="live_transcribe">Transcribe live as I speak</string>
+    <string name="live_transcribe_hint">Streaming text while holding (Parakeet). Whisper and Moonshine decode when you release.</string>
+    <string name="models_missing_open_download">Models missing. Opening download screen.</string>
     <string name="select_model">Model:</string>
     <string name="main_model_moonshine">Moonshine Base (English)</string>
     <string name="moonshine_asr_model">Moonshine Base (English)</string>
@@ -55,5 +64,7 @@
     <string name="moonshine_start_failed">Could not start Moonshine (permission, device, or models).</string>
     <string name="moonshine_arm64_only">Moonshine needs a 64-bit ARM phone or an ARM64 (arm64-v8a) emulator image. x86/x86_64 AVDs have no Moonshine native library.</string>
     <string name="moonshine_info_long_press">Long-press ℹ️ for Moonshine settings</string>
-    <string name="whisper_model_missing">Whisper TFLite model is not installed. Download it from the setup screen or turn off “Use Moonshine on main screen”.</string>
+    <string name="whisper_model_missing">Whisper TFLite model is not installed. Open the download screen and fetch Whisper models.</string>
+    <string name="parakeet_models_missing">Parakeet ONNX models are not installed. Download them from the setup screen.</string>
+    <string name="parakeet_start_failed">Could not start Parakeet (permission or models).</string>
 </resources>
