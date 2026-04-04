@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/parakeet_poc_title"
+        android:textSize="18sp"
+        android:textColor="@color/colorAccent" />
+
+    <TextView
+        android:id="@+id/parakeet_model_status"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:textSize="14sp" />
+
+    <Button
+        android:id="@+id/btn_parakeet_download"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="@string/parakeet_download_models" />
+
+    <ProgressBar
+        android:id="@+id/parakeet_download_progress"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:visibility="gone" />
+
+    <androidx.appcompat.widget.SwitchCompat
+        android:id="@+id/switch_parakeet_main"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:text="@string/parakeet_use_main" />
+
+    <androidx.appcompat.widget.SwitchCompat
+        android:id="@+id/switch_parakeet_ime"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/parakeet_use_ime" />
+
+    <androidx.appcompat.widget.SwitchCompat
+        android:id="@+id/switch_parakeet_recognition"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/parakeet_use_voice_input" />
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_marginTop="12dp">
+
+        <TextView
+            android:id="@+id/parakeet_transcript"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textIsSelectable="true"
+            android:textSize="16sp"
+            android:hint="@string/parakeet_hold_mic" />
+    </ScrollView>
+
+    <ImageButton
+        android:id="@+id/btn_parakeet_mic"
+        android:layout_width="96dp"
+        android:layout_height="96dp"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="8dp"
+        android:background="@drawable/rounded_button_background"
+        android:contentDescription="@string/record_button"
+        android:src="@drawable/ic_mic_48dp" />
+</LinearLayout>

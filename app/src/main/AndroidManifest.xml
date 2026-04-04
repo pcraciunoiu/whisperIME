@@ -36,6 +36,13 @@
         </activity>
 
         <activity
+            android:name="com.whispertflite.parakeet.ParakeetPocActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Whisper.NoActionBar"
+            android:label="@string/parakeet_poc_title"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize" />
+
+        <activity
             android:name=".DownloadActivity"
             android:screenOrientation="portrait"
             android:exported="true">
