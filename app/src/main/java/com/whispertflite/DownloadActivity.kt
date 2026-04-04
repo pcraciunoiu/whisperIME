@@ -7,10 +7,10 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.preference.PreferenceManager
 import com.whispertflite.databinding.ActivityDownloadBinding
-import com.whispertflite.parakeet.ParakeetConstants
-import com.whispertflite.parakeet.ParakeetDownloader
-import com.whispertflite.parakeet.ParakeetModelFiles
-import com.whispertflite.parakeet.ParakeetPreferences
+import com.whispertflite.moonshine.MoonshineConstants
+import com.whispertflite.moonshine.MoonshineDownloader
+import com.whispertflite.moonshine.MoonshineModelFiles
+import com.whispertflite.moonshine.MoonshinePreferences
 import com.whispertflite.utils.Downloader
 import com.whispertflite.utils.ThemeUtils
 
@@ -25,24 +25,29 @@ class DownloadActivity : AppCompatActivity() {
         ThemeUtils.setStatusBarAppearance(this)
 
         val sp = PreferenceManager.getDefaultSharedPreferences(this)
-        val parakeetWizard = sp.getBoolean(ParakeetPreferences.KEY_SETUP_WIZARD_PARAKEET, false)
-        if (parakeetWizard) {
-            binding?.radioParakeet?.isChecked = true
+        MoonshinePreferences.migrateFromParakeetKeys(this)
+        val moonshineWizard = sp.getBoolean(MoonshinePreferences.KEY_SETUP_WIZARD_MOONSHINE, false) ||
+            sp.getBoolean("setupWizardParakeet", false)
+        if (moonshineWizard) {
+            binding?.radioMoonshine?.isChecked = true
         } else {
             binding?.radioWhisper?.isChecked = true
         }
-        applyWizardDescription(parakeetWizard)
+        applyWizardDescription(moonshineWizard)
 
         binding?.modelChoiceGroup?.setOnCheckedChangeListener { _, checkedId ->
-            val useParakeet = checkedId == R.id.radio_parakeet
-            sp.edit().putBoolean(ParakeetPreferences.KEY_SETUP_WIZARD_PARAKEET, useParakeet).apply()
-            applyWizardDescription(useParakeet)
+            val useMoonshine = checkedId == R.id.radio_moonshine
+            sp.edit().putBoolean(MoonshinePreferences.KEY_SETUP_WIZARD_MOONSHINE, useMoonshine).apply()
+            if (!useMoonshine) {
+                sp.edit().remove("setupWizardParakeet").apply()
+            }
+            applyWizardDescription(useMoonshine)
         }
     }
 
-    private fun applyWizardDescription(parakeet: Boolean) {
+    private fun applyWizardDescription(moonshine: Boolean) {
         binding?.downloadModelDesc?.setText(
-            if (parakeet) R.string.download_model_text_parakeet else R.string.download_model_text,
+            if (moonshine) R.string.download_model_text_moonshine else R.string.download_model_text,
         )
     }
 
@@ -50,13 +55,14 @@ class DownloadActivity : AppCompatActivity() {
         super.onResume()
         Downloader.copyAssetsToSdcard(this)
         val sp = PreferenceManager.getDefaultSharedPreferences(this)
-        val parakeetWizard = sp.getBoolean(ParakeetPreferences.KEY_SETUP_WIZARD_PARAKEET, false)
-        if (parakeetWizard) {
-            val dir = getExternalFilesDir(null)
-            if (ParakeetModelFiles.allOnnxPresent(dir)) {
+        MoonshinePreferences.migrateFromParakeetKeys(this)
+        val moonshineWizard = sp.getBoolean(MoonshinePreferences.KEY_SETUP_WIZARD_MOONSHINE, false) ||
+            sp.getBoolean("setupWizardParakeet", false)
+        if (moonshineWizard) {
+            if (MoonshineModelFiles.allModelFilesPresent(this)) {
                 sp.edit()
-                    .putBoolean(ParakeetPreferences.KEY_USE_PARAKEET_MAIN, true)
-                    .putString("modelName", ParakeetConstants.MAIN_SCREEN_SPINNER_SENTINEL)
+                    .putBoolean(MoonshinePreferences.KEY_USE_MOONSHINE_MAIN, true)
+                    .putString("modelName", MoonshineConstants.MAIN_SCREEN_SPINNER_SENTINEL)
                     .apply()
                 binding?.downloadProgress?.progress = 100
                 binding?.downloadProgress?.visibility = View.VISIBLE
@@ -82,20 +88,20 @@ class DownloadActivity : AppCompatActivity() {
     }
 
     fun download(view: View) {
-        val useParakeet = binding?.radioParakeet?.isChecked == true
+        val useMoonshine = binding?.radioMoonshine?.isChecked == true
         binding?.downloadSize?.visibility = View.VISIBLE
         binding?.downloadProgress?.visibility = View.VISIBLE
         binding?.buttonStart?.visibility = View.INVISIBLE
-        if (useParakeet) {
+        if (useMoonshine) {
             binding?.buttonUpdate?.visibility = View.GONE
-            ParakeetDownloader.downloadParakeetModels(
+            MoonshineDownloader.downloadMoonshineBaseModels(
                 this,
                 binding?.downloadProgress,
                 binding?.downloadSize,
                 Runnable {
                     PreferenceManager.getDefaultSharedPreferences(this).edit()
-                        .putBoolean(ParakeetPreferences.KEY_USE_PARAKEET_MAIN, true)
-                        .putString("modelName", ParakeetConstants.MAIN_SCREEN_SPINNER_SENTINEL)
+                        .putBoolean(MoonshinePreferences.KEY_USE_MOONSHINE_MAIN, true)
+                        .putString("modelName", MoonshineConstants.MAIN_SCREEN_SPINNER_SENTINEL)
                         .apply()
                     binding?.downloadProgress?.progress = 100
                     binding?.buttonStart?.visibility = View.VISIBLE

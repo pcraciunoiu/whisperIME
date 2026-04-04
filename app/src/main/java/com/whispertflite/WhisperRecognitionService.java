@@ -29,9 +29,9 @@ import com.github.houbb.opencc4j.util.ZhConverterUtil;
 import com.whispertflite.asr.Recorder;
 import com.whispertflite.asr.Whisper;
 import com.whispertflite.asr.WhisperResult;
-import com.whispertflite.parakeet.ParakeetModelFiles;
-import com.whispertflite.parakeet.ParakeetPreferences;
-import com.whispertflite.parakeet.ParakeetStreamingRecorder;
+import com.whispertflite.moonshine.MoonshineHoldRecorder;
+import com.whispertflite.moonshine.MoonshineModelFiles;
+import com.whispertflite.moonshine.MoonshinePreferences;
 import com.whispertflite.utils.HapticFeedback;
 import com.whispertflite.utils.InputLang;
 
@@ -46,12 +46,13 @@ public class WhisperRecognitionService extends RecognitionService {
     private File selectedTfliteFile = null;
     private boolean recognitionCancelled = false;
     private SharedPreferences sp = null;
-    private ParakeetStreamingRecorder parakeetRecognitionRecorder = null;
+    private MoonshineHoldRecorder moonshineRecognitionRecorder = null;
 
     @Override
     protected void onStartListening(Intent recognizerIntent, Callback callback) {
         String targetLang = recognizerIntent.getStringExtra(RecognizerIntent.EXTRA_LANGUAGE);
         sp = PreferenceManager.getDefaultSharedPreferences(this);
+        MoonshinePreferences.migrateFromParakeetKeys(this);
         String langCode = sp.getString("recognitionServiceLanguage", "auto");
         int langToken = InputLang.getIdForLanguage(InputLang.getLangList(),langCode);
         Log.d(TAG,"default langToken " + langToken);
@@ -69,12 +70,12 @@ public class WhisperRecognitionService extends RecognitionService {
         sdcardDataFolder = this.getExternalFilesDir(null);
         selectedTfliteFile = new File(sdcardDataFolder, sp.getString("recognitionServiceModelName", MULTI_LINGUAL_TOP_WORLD_SLOW));
 
-        boolean useParakeet = ParakeetPreferences.useParakeetRecognition(this)
-                && ParakeetModelFiles.allOnnxPresent(sdcardDataFolder);
+        boolean useMoonshine = MoonshinePreferences.useMoonshineRecognition(this)
+                && MoonshineModelFiles.allModelFilesPresent(this);
 
-        if (useParakeet) {
+        if (useMoonshine) {
             Handler mainHandler = new Handler(Looper.getMainLooper());
-            parakeetRecognitionRecorder = new ParakeetStreamingRecorder(this, sdcardDataFolder, mainHandler,
+            moonshineRecognitionRecorder = new MoonshineHoldRecorder(this, mainHandler,
                     partial -> {
                         try {
                             Bundle b = new Bundle();
@@ -86,14 +87,14 @@ public class WhisperRecognitionService extends RecognitionService {
                             throw new RuntimeException(e);
                         }
                     });
-            if (parakeetRecognitionRecorder.start()) {
+            if (moonshineRecognitionRecorder.start()) {
                 try {
                     callback.beginningOfSpeech();
                 } catch (RemoteException e) {
                     throw new RuntimeException(e);
                 }
             } else {
-                parakeetRecognitionRecorder = null;
+                moonshineRecognitionRecorder = null;
                 try {
                     callback.error(ERROR_CLIENT);
                 } catch (RemoteException e) {
@@ -163,9 +164,9 @@ public class WhisperRecognitionService extends RecognitionService {
     @Override
     protected void onCancel(Callback callback) {
         Log.d(TAG,"cancel");
-        if (parakeetRecognitionRecorder != null) {
-            parakeetRecognitionRecorder.stop();
-            parakeetRecognitionRecorder = null;
+        if (moonshineRecognitionRecorder != null) {
+            moonshineRecognitionRecorder.stop();
+            moonshineRecognitionRecorder = null;
         }
         stopRecording();
         deinitModel();
@@ -175,9 +176,9 @@ public class WhisperRecognitionService extends RecognitionService {
     @Override
     protected void onStopListening(Callback callback) {
         Log.d(TAG,"StopListening");
-        if (parakeetRecognitionRecorder != null) {
-            String fin = parakeetRecognitionRecorder.stop();
-            parakeetRecognitionRecorder = null;
+        if (moonshineRecognitionRecorder != null) {
+            String fin = moonshineRecognitionRecorder.stop();
+            moonshineRecognitionRecorder = null;
             try {
                 callback.endOfSpeech();
                 Bundle results = new Bundle();

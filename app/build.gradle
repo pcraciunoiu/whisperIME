@@ -62,7 +62,8 @@ dependencies {
     implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.8.7'
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1'
 
-    implementation 'com.microsoft.onnxruntime:onnxruntime-android:1.19.2'
+    implementation 'ai.moonshine:moonshine-voice:0.0.51'
+    implementation 'org.apache.commons:commons-compress:1.27.1'
 
     // Main TensorFlow Lite library
     //noinspection GradleDependency: Crash with 2.16.1, nonsense output with com.google.ai.edge.litert:litert:1.0.1

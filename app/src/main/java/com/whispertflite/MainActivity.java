@@ -46,11 +46,11 @@ import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.whispertflite.asr.Recorder;
 import com.whispertflite.asr.Whisper;
 import com.whispertflite.asr.WhisperResult;
-import com.whispertflite.parakeet.ParakeetConstants;
-import com.whispertflite.parakeet.ParakeetModelFiles;
-import com.whispertflite.parakeet.ParakeetPocActivity;
-import com.whispertflite.parakeet.ParakeetPreferences;
-import com.whispertflite.parakeet.ParakeetStreamingRecorder;
+import com.whispertflite.moonshine.MoonshineConstants;
+import com.whispertflite.moonshine.MoonshineHoldRecorder;
+import com.whispertflite.moonshine.MoonshineModelFiles;
+import com.whispertflite.moonshine.MoonshinePocActivity;
+import com.whispertflite.moonshine.MoonshinePreferences;
 import com.whispertflite.utils.HapticFeedback;
 import com.whispertflite.utils.InputLang;
 import com.whispertflite.utils.LanguagePairAdapter;
@@ -95,7 +95,7 @@ public class MainActivity extends AppCompatActivity {
 
     private Recorder mRecorder = null;
     private Whisper mWhisper = null;
-    private ParakeetStreamingRecorder parakeetMainRecorder = null;
+    private MoonshineHoldRecorder moonshineMainRecorder = null;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     private File sdcardDataFolder = null;
@@ -110,9 +110,9 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
-        if (parakeetMainRecorder != null) {
-            parakeetMainRecorder.stop();
-            parakeetMainRecorder = null;
+        if (moonshineMainRecorder != null) {
+            moonshineMainRecorder.stop();
+            moonshineMainRecorder = null;
         }
         deinitModel();
         deinitTTS();
@@ -136,6 +136,7 @@ public class MainActivity extends AppCompatActivity {
         checkInputMethodEnabled();
         processingBar = findViewById(R.id.processing_bar);
         sp = PreferenceManager.getDefaultSharedPreferences(this);
+        MoonshinePreferences.migrateFromParakeetKeys(this);
         append = findViewById(R.id.mode_append);
 
         layoutTTS = findViewById(R.id.layout_tts);
@@ -171,16 +172,16 @@ public class MainActivity extends AppCompatActivity {
         sdcardDataFolder = this.getExternalFilesDir(null);
 
         ArrayList<File> tfliteFiles = getFilesWithExtension(sdcardDataFolder, ".tflite");
-        boolean showParakeetInModelSpinner = ParakeetPreferences.useParakeetMain(this)
-                && ParakeetModelFiles.allOnnxPresent(sdcardDataFolder);
-        if (showParakeetInModelSpinner) {
-            tfliteFiles.add(0, new File(sdcardDataFolder, ParakeetConstants.MAIN_SCREEN_SPINNER_SENTINEL));
+        boolean showMoonshineInModelSpinner = MoonshinePreferences.useMoonshineMain(this)
+                && MoonshineModelFiles.allModelFilesPresent(mContext);
+        if (showMoonshineInModelSpinner) {
+            tfliteFiles.add(0, new File(sdcardDataFolder, MoonshineConstants.MAIN_SCREEN_SPINNER_SENTINEL));
         }
 
-        // Initialize Whisper unless Parakeet-only main (ONNX present, no TFLite file yet)
+        // Initialize Whisper unless Moonshine-only main (models present, no TFLite file yet)
         File initModelFile = new File(sdcardDataFolder, sp.getString("modelName", MULTI_LINGUAL_TOP_WORLD_SLOW));
-        boolean skipWhisperInit = ParakeetPreferences.useParakeetMain(this)
-                && ParakeetModelFiles.allOnnxPresent(sdcardDataFolder)
+        boolean skipWhisperInit = MoonshinePreferences.useMoonshineMain(this)
+                && MoonshineModelFiles.allModelFilesPresent(mContext)
                 && !initModelFile.isFile();
         if (!skipWhisperInit) {
             initModel();
@@ -189,7 +190,7 @@ public class MainActivity extends AppCompatActivity {
         btnInfo = findViewById(R.id.btnInfo);
         btnInfo.setOnClickListener(view -> startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/woheller69/whisperIME#Donate"))));
         btnInfo.setOnLongClickListener(v -> {
-            startActivity(new Intent(this, ParakeetPocActivity.class));
+            startActivity(new Intent(this, MoonshinePocActivity.class));
             return true;
         });
 
@@ -217,12 +218,12 @@ public class MainActivity extends AppCompatActivity {
         selectedTfliteFile = new File(sdcardDataFolder, sp.getString("modelName", MULTI_LINGUAL_TOP_WORLD_SLOW));
         ArrayAdapter<File> tfliteAdapter = getFileArrayAdapter(tfliteFiles);
         int position = tfliteAdapter.getPosition(selectedTfliteFile);
-        if (position < 0 && showParakeetInModelSpinner) {
-            File parakeetChoice = new File(sdcardDataFolder, ParakeetConstants.MAIN_SCREEN_SPINNER_SENTINEL);
-            position = tfliteAdapter.getPosition(parakeetChoice);
+        if (position < 0 && showMoonshineInModelSpinner) {
+            File moonshineChoice = new File(sdcardDataFolder, MoonshineConstants.MAIN_SCREEN_SPINNER_SENTINEL);
+            position = tfliteAdapter.getPosition(moonshineChoice);
             if (position >= 0) {
-                selectedTfliteFile = parakeetChoice;
-                sp.edit().putString("modelName", ParakeetConstants.MAIN_SCREEN_SPINNER_SENTINEL).apply();
+                selectedTfliteFile = moonshineChoice;
+                sp.edit().putString("modelName", MoonshineConstants.MAIN_SCREEN_SPINNER_SENTINEL).apply();
             }
         }
         spinnerTflite = findViewById(R.id.spnrTfliteFiles);
@@ -245,7 +246,7 @@ public class MainActivity extends AppCompatActivity {
                 SharedPreferences.Editor editor = sp.edit();
                 editor.putString("modelName",selectedTfliteFile.getName());
                 editor.apply();
-                if (ParakeetConstants.MAIN_SCREEN_SPINNER_SENTINEL.equals(selectedTfliteFile.getName())) {
+                if (MoonshineConstants.MAIN_SCREEN_SPINNER_SENTINEL.equals(selectedTfliteFile.getName())) {
                     deinitModel();
                 } else {
                     initModel();
@@ -264,23 +265,27 @@ public class MainActivity extends AppCompatActivity {
         btnRecord = findViewById(R.id.btnRecord);
 
         btnRecord.setOnTouchListener((v, event) -> {
-            boolean parakeetMain = ParakeetPreferences.useParakeetMain(mContext)
-                    && ParakeetModelFiles.allOnnxPresent(sdcardDataFolder);
-            if (parakeetMain) {
+            boolean moonshineMain = MoonshinePreferences.useMoonshineMain(mContext)
+                    && MoonshineModelFiles.allModelFilesPresent(mContext);
+            if (moonshineMain) {
                 if (event.getAction() == MotionEvent.ACTION_DOWN) {
                     runOnUiThread(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background_pressed));
-                    if (!ParakeetModelFiles.allOnnxPresent(sdcardDataFolder)) {
-                        Toast.makeText(this, R.string.parakeet_models_missing, Toast.LENGTH_LONG).show();
+                    if (!MoonshineModelFiles.isDeviceSupported(mContext)) {
+                        Toast.makeText(this, R.string.moonshine_arm64_only, Toast.LENGTH_LONG).show();
+                        return true;
+                    }
+                    if (!MoonshineModelFiles.allModelFilesPresent(mContext)) {
+                        Toast.makeText(this, R.string.moonshine_models_missing, Toast.LENGTH_LONG).show();
                         return true;
                     }
                     HapticFeedback.vibrate(this);
                     if (!append.isChecked()) runOnUiThread(() -> tvResult.setText(""));
                     startTime = System.currentTimeMillis();
-                    parakeetMainRecorder = new ParakeetStreamingRecorder(mContext, sdcardDataFolder, mainHandler,
+                    moonshineMainRecorder = new MoonshineHoldRecorder(mContext, mainHandler,
                             partial -> runOnUiThread(() -> tvResult.setText(partial)));
-                    if (!parakeetMainRecorder.start()) {
-                        Toast.makeText(this, R.string.parakeet_start_failed, Toast.LENGTH_SHORT).show();
-                        parakeetMainRecorder = null;
+                    if (!moonshineMainRecorder.start()) {
+                        Toast.makeText(this, R.string.moonshine_start_failed, Toast.LENGTH_SHORT).show();
+                        moonshineMainRecorder = null;
                     }
                     runOnUiThread(() -> processingBar.setProgress(100));
                     countDownTimer = new CountDownTimer(30000, 1000) {
@@ -296,15 +301,15 @@ public class MainActivity extends AppCompatActivity {
                     runOnUiThread(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background));
                     if (countDownTimer != null) countDownTimer.cancel();
                     runOnUiThread(() -> processingBar.setProgress(0));
-                    if (parakeetMainRecorder != null) {
-                        String fin = parakeetMainRecorder.stop();
-                        parakeetMainRecorder = null;
+                    if (moonshineMainRecorder != null) {
+                        String fin = moonshineMainRecorder.stop();
+                        moonshineMainRecorder = null;
                         long elapsed = System.currentTimeMillis() - startTime;
                         runOnUiThread(() -> {
                             if (append.isChecked()) tvResult.append(fin + " ");
                             else tvResult.setText(fin);
                             tvStatus.setText(getString(R.string.processing_done) + elapsed + "\u2009ms\n"
-                                    + getString(R.string.language) + " " + getString(R.string.parakeet_asr_model));
+                                    + getString(R.string.language) + " " + getString(R.string.moonshine_asr_model));
                         });
                     }
                 }
@@ -431,7 +436,7 @@ public class MainActivity extends AppCompatActivity {
     // Model initialization
     private void initModel() {
         File modelFile = new File(sdcardDataFolder, sp.getString("modelName", MULTI_LINGUAL_TOP_WORLD_SLOW));
-        if (ParakeetConstants.MAIN_SCREEN_SPINNER_SENTINEL.equals(modelFile.getName())) {
+        if (MoonshineConstants.MAIN_SCREEN_SPINNER_SENTINEL.equals(modelFile.getName())) {
             deinitModel();
             return;
         }
@@ -486,7 +491,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void applyLanguageSpinnerForModelChoice(File modelChoice, LanguagePairAdapter languagePairAdapter) {
         String name = modelChoice.getName();
-        if (ParakeetConstants.MAIN_SCREEN_SPINNER_SENTINEL.equals(name)
+        if (MoonshineConstants.MAIN_SCREEN_SPINNER_SENTINEL.equals(name)
                 || name.equals(ENGLISH_ONLY_MODEL)) {
             spinnerLanguage.setSelection(0);
             spinnerLanguage.setEnabled(false);
@@ -527,8 +532,8 @@ public class MainActivity extends AppCompatActivity {
                     textView.setText(R.string.multi_lingual_fast);
                 else if ((getItem(position).getName()).equals(MULTI_LINGUAL_TOP_WORLD_FAST))
                     textView.setText(R.string.multi_lingual_fast);
-                else if (ParakeetConstants.MAIN_SCREEN_SPINNER_SENTINEL.equals(getItem(position).getName()))
-                    textView.setText(R.string.main_model_parakeet);
+                else if (MoonshineConstants.MAIN_SCREEN_SPINNER_SENTINEL.equals(getItem(position).getName()))
+                    textView.setText(R.string.main_model_moonshine);
                 else
                     textView.setText(getItem(position).getName().substring(0, getItem(position).getName().length() - ".tflite".length()));
 
@@ -551,8 +556,8 @@ public class MainActivity extends AppCompatActivity {
                     textView.setText(R.string.multi_lingual_fast);
                 else if ((getItem(position).getName()).equals(MULTI_LINGUAL_TOP_WORLD_FAST))
                     textView.setText(R.string.multi_lingual_fast);
-                else if (ParakeetConstants.MAIN_SCREEN_SPINNER_SENTINEL.equals(getItem(position).getName()))
-                    textView.setText(R.string.main_model_parakeet);
+                else if (MoonshineConstants.MAIN_SCREEN_SPINNER_SENTINEL.equals(getItem(position).getName()))
+                    textView.setText(R.string.main_model_moonshine);
                 else
                     textView.setText(getItem(position).getName().substring(0, getItem(position).getName().length() - ".tflite".length()));
 
@@ -615,9 +620,9 @@ public class MainActivity extends AppCompatActivity {
 
     private void stopProcessing() {
         processingBar.setIndeterminate(false);
-        if (parakeetMainRecorder != null) {
-            parakeetMainRecorder.stop();
-            parakeetMainRecorder = null;
+        if (moonshineMainRecorder != null) {
+            moonshineMainRecorder.stop();
+            moonshineMainRecorder = null;
         }
         if (mWhisper != null && mWhisper.isInProgress()) mWhisper.stop();
     }

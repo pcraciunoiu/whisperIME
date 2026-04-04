@@ -34,9 +34,9 @@ import com.github.houbb.opencc4j.util.ZhConverterUtil;
 import com.whispertflite.asr.Recorder;
 import com.whispertflite.asr.Whisper;
 import com.whispertflite.asr.WhisperResult;
-import com.whispertflite.parakeet.ParakeetModelFiles;
-import com.whispertflite.parakeet.ParakeetPreferences;
-import com.whispertflite.parakeet.ParakeetStreamingRecorder;
+import com.whispertflite.moonshine.MoonshineHoldRecorder;
+import com.whispertflite.moonshine.MoonshineModelFiles;
+import com.whispertflite.moonshine.MoonshinePreferences;
 import com.whispertflite.utils.HapticFeedback;
 import com.whispertflite.utils.InputLang;
 
@@ -63,23 +63,24 @@ public class WhisperInputMethodService extends InputMethodService {
     private static boolean translate = false;
     private boolean modeAuto = false;
     private LinearLayout layoutButtons;
-    private ParakeetStreamingRecorder imeParakeetRecorder = null;
+    private MoonshineHoldRecorder imeMoonshineRecorder = null;
 
-    private boolean useParakeetImeNow() {
-        return ParakeetPreferences.useParakeetIme(this) && ParakeetModelFiles.allOnnxPresent(sdcardDataFolder);
+    private boolean useMoonshineImeNow() {
+        return MoonshinePreferences.useMoonshineIme(this) && MoonshineModelFiles.allModelFilesPresent(this);
     }
 
     @Override
     public void onCreate() {
         mContext = this;
+        MoonshinePreferences.migrateFromParakeetKeys(this);
         super.onCreate();
     }
 
     @Override
     public void onDestroy() {
-        if (imeParakeetRecorder != null) {
-            imeParakeetRecorder.stop();
-            imeParakeetRecorder = null;
+        if (imeMoonshineRecorder != null) {
+            imeMoonshineRecorder.stop();
+            imeMoonshineRecorder = null;
         }
         deinitModel();
         if (mRecorder != null && mRecorder.isInProgress()) {
@@ -103,7 +104,7 @@ public class WhisperInputMethodService extends InputMethodService {
     public void onStartInputView(EditorInfo attribute, boolean restarting){
         selectedTfliteFile = new File(sdcardDataFolder, sp.getString("modelName", MULTI_LINGUAL_TOP_WORLD_SLOW));
 
-        if (useParakeetImeNow()) {
+        if (useMoonshineImeNow()) {
             deinitModel();
         } else if (!selectedTfliteFile.exists()) {
             switchToPreviousInputMethod();  //switch back and download models first
@@ -168,7 +169,7 @@ public class WhisperInputMethodService extends InputMethodService {
 
         });
 
-        if (modeAuto && !useParakeetImeNow()) {
+        if (modeAuto && !useMoonshineImeNow()) {
             layoutButtons.setVisibility(View.GONE);
             HapticFeedback.vibrate(this);
             startRecording();
@@ -229,18 +230,18 @@ public class WhisperInputMethodService extends InputMethodService {
         });
 
         btnRecord.setOnTouchListener((v, event) -> {
-            if (useParakeetImeNow()) {
+            if (useMoonshineImeNow()) {
                 if (event.getAction() == MotionEvent.ACTION_DOWN) {
                     handler.post(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background_pressed));
                     if (checkRecordPermission()) {
                         HapticFeedback.vibrate(this);
-                        imeParakeetRecorder = new ParakeetStreamingRecorder(this, sdcardDataFolder, handler,
+                        imeMoonshineRecorder = new MoonshineHoldRecorder(this, handler,
                                 partial -> handler.post(() -> {
                                     InputConnection ic = getCurrentInputConnection();
                                     if (ic != null) ic.setComposingText(partial, 1);
                                 }));
-                        if (!imeParakeetRecorder.start()) {
-                            imeParakeetRecorder = null;
+                        if (!imeMoonshineRecorder.start()) {
+                            imeMoonshineRecorder = null;
                         }
                         handler.post(() -> processingBar.setProgress(100));
                         countDownTimer = new CountDownTimer(30000, 1000) {
@@ -261,9 +262,9 @@ public class WhisperInputMethodService extends InputMethodService {
                     handler.post(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background));
                     if (countDownTimer != null) countDownTimer.cancel();
                     handler.post(() -> processingBar.setProgress(0));
-                    if (imeParakeetRecorder != null) {
-                        String fin = imeParakeetRecorder.stop();
-                        imeParakeetRecorder = null;
+                    if (imeMoonshineRecorder != null) {
+                        String fin = imeMoonshineRecorder.stop();
+                        imeMoonshineRecorder = null;
                         handler.post(() -> {
                             InputConnection ic = getCurrentInputConnection();
                             if (ic != null) {
@@ -314,9 +315,9 @@ public class WhisperInputMethodService extends InputMethodService {
         });
 
         btnKeyboard.setOnClickListener(v -> {
-            if (imeParakeetRecorder != null) {
-                imeParakeetRecorder.stop();
-                imeParakeetRecorder = null;
+            if (imeMoonshineRecorder != null) {
+                imeMoonshineRecorder.stop();
+                imeMoonshineRecorder = null;
             }
             if (mWhisper != null) stopTranscription();
             switchToPreviousInputMethod();

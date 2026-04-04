@@ -8,7 +8,7 @@
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="@string/parakeet_poc_title"
+        android:text="@string/moonshine_poc_title"
         android:textSize="18sp"
         android:textColor="@color/colorAccent" />
 
@@ -24,7 +24,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
-        android:text="@string/parakeet_download_models" />
+        android:text="@string/moonshine_download_models" />
 
     <ProgressBar
         android:id="@+id/parakeet_download_progress"
@@ -39,19 +39,19 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="12dp"
-        android:text="@string/parakeet_use_main" />
+        android:text="@string/moonshine_use_main" />
 
     <androidx.appcompat.widget.SwitchCompat
         android:id="@+id/switch_parakeet_ime"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="@string/parakeet_use_ime" />
+        android:text="@string/moonshine_use_ime" />
 
     <androidx.appcompat.widget.SwitchCompat
         android:id="@+id/switch_parakeet_recognition"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="@string/parakeet_use_voice_input" />
+        android:text="@string/moonshine_use_voice_input" />
 
     <ScrollView
         android:layout_width="match_parent"
@@ -65,7 +65,7 @@
             android:layout_height="wrap_content"
             android:textIsSelectable="true"
             android:textSize="16sp"
-            android:hint="@string/parakeet_hold_mic" />
+            android:hint="@string/moonshine_hold_mic" />
     </ScrollView>
 
     <ImageButton

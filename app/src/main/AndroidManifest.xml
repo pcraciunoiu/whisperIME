@@ -2,6 +2,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- moonshine-voice AAR declares minSdk 35; we run on 28+ and rely on native lib + API surface being compatible. -->
+    <uses-sdk tools:overrideLibrary="ai.moonshine.voice" />
+
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
@@ -36,10 +39,10 @@
         </activity>
 
         <activity
-            android:name="com.whispertflite.parakeet.ParakeetPocActivity"
+            android:name="com.whispertflite.moonshine.MoonshinePocActivity"
             android:exported="false"
             android:theme="@style/Theme.Whisper.NoActionBar"
-            android:label="@string/parakeet_poc_title"
+            android:label="@string/moonshine_poc_title"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize" />
 
         <activity

@@ -1,4 +1,4 @@
-package com.whispertflite.parakeet
+package com.whispertflite.moonshine
 
 import android.Manifest
 import android.annotation.SuppressLint
@@ -19,40 +19,41 @@ import com.whispertflite.utils.HapticFeedback
 import com.whispertflite.utils.ThemeUtils
 
 /**
- * Parakeet ONNX streaming POC: download models, toggle IME / voice-input / main prefs, hold-to-dictate.
- * Manual host verification: install APK, download ~650MB encoder, hold mic, watch partial text.
+ * Moonshine Base (English) POC: download models, toggle on-device ASR prefs, hold-to-dictate.
  */
-class ParakeetPocActivity : AppCompatActivity() {
+class MoonshinePocActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityParakeetPocBinding
     private val mainHandler = Handler(Looper.getMainLooper())
-    private var recorder: ParakeetStreamingRecorder? = null
+    private var recorder: MoonshineHoldRecorder? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         ThemeUtils.setStatusBarAppearance(this)
+        MoonshinePreferences.migrateFromParakeetKeys(this)
         binding = ActivityParakeetPocBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
         val sp = PreferenceManager.getDefaultSharedPreferences(this)
-        binding.switchParakeetMain.isChecked = sp.getBoolean(ParakeetPreferences.KEY_USE_PARAKEET_MAIN, false)
-        binding.switchParakeetIme.isChecked = sp.getBoolean(ParakeetPreferences.KEY_USE_PARAKEET_IME, false)
-        binding.switchParakeetRecognition.isChecked = sp.getBoolean(ParakeetPreferences.KEY_USE_PARAKEET_RECOGNITION, false)
+        binding.switchParakeetMain.isChecked = sp.getBoolean(MoonshinePreferences.KEY_USE_MOONSHINE_MAIN, false)
+        binding.switchParakeetIme.isChecked = sp.getBoolean(MoonshinePreferences.KEY_USE_MOONSHINE_IME, false)
+        binding.switchParakeetRecognition.isChecked =
+            sp.getBoolean(MoonshinePreferences.KEY_USE_MOONSHINE_RECOGNITION, false)
 
         binding.switchParakeetMain.setOnCheckedChangeListener { _, v ->
-            sp.edit().putBoolean(ParakeetPreferences.KEY_USE_PARAKEET_MAIN, v).apply()
+            sp.edit().putBoolean(MoonshinePreferences.KEY_USE_MOONSHINE_MAIN, v).apply()
         }
         binding.switchParakeetIme.setOnCheckedChangeListener { _, v ->
-            sp.edit().putBoolean(ParakeetPreferences.KEY_USE_PARAKEET_IME, v).apply()
+            sp.edit().putBoolean(MoonshinePreferences.KEY_USE_MOONSHINE_IME, v).apply()
         }
         binding.switchParakeetRecognition.setOnCheckedChangeListener { _, v ->
-            sp.edit().putBoolean(ParakeetPreferences.KEY_USE_PARAKEET_RECOGNITION, v).apply()
+            sp.edit().putBoolean(MoonshinePreferences.KEY_USE_MOONSHINE_RECOGNITION, v).apply()
         }
 
         binding.btnParakeetDownload.setOnClickListener {
             binding.parakeetDownloadProgress.visibility = View.VISIBLE
             binding.parakeetDownloadProgress.progress = 0
-            ParakeetDownloader.downloadParakeetModels(
+            MoonshineDownloader.downloadMoonshineBaseModels(
                 this,
                 binding.parakeetDownloadProgress,
                 null,
@@ -65,12 +66,12 @@ class ParakeetPocActivity : AppCompatActivity() {
     }
 
     private fun refreshModelStatus() {
-        val dir = getExternalFilesDir(null)
-        val ok = ParakeetModelFiles.allOnnxPresent(dir)
-        binding.parakeetModelStatus.text = if (ok) {
-            getString(R.string.parakeet_models_ready)
-        } else {
-            getString(R.string.parakeet_models_missing)
+        val ok = MoonshineModelFiles.allModelFilesPresent(this)
+        val arm = MoonshineModelFiles.isDeviceSupported(this)
+        binding.parakeetModelStatus.text = when {
+            !arm -> getString(R.string.moonshine_arm64_only)
+            ok -> getString(R.string.moonshine_models_ready)
+            else -> getString(R.string.moonshine_models_missing)
         }
     }
 
@@ -80,23 +81,23 @@ class ParakeetPocActivity : AppCompatActivity() {
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
                     if (!ensureAudioPermission()) return@setOnTouchListener true
-                    if (!ParakeetModelFiles.allOnnxPresent(getExternalFilesDir(null))) {
-                        Toast.makeText(this, R.string.parakeet_models_missing, Toast.LENGTH_LONG).show()
+                    if (!MoonshineModelFiles.isDeviceSupported(this)) {
+                        Toast.makeText(this, R.string.moonshine_arm64_only, Toast.LENGTH_LONG).show()
+                        return@setOnTouchListener true
+                    }
+                    if (!MoonshineModelFiles.allModelFilesPresent(this)) {
+                        Toast.makeText(this, R.string.moonshine_models_missing, Toast.LENGTH_LONG).show()
                         return@setOnTouchListener true
                     }
                     HapticFeedback.vibrate(this)
                     binding.parakeetTranscript.text = ""
-                    val dir = getExternalFilesDir(null)!!
-                    recorder = ParakeetStreamingRecorder(
+                    recorder = MoonshineHoldRecorder(
                         this,
-                        dir,
                         mainHandler,
-                    ) { partial ->
-                        binding.parakeetTranscript.text = partial
-                    }
+                    ) { partial -> binding.parakeetTranscript.text = partial }
                     val started = recorder!!.start()
                     if (!started) {
-                        Toast.makeText(this, R.string.parakeet_start_failed, Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this, R.string.moonshine_start_failed, Toast.LENGTH_SHORT).show()
                         recorder = null
                     } else {
                         binding.btnParakeetMic.setBackgroundResource(R.drawable.rounded_button_background_pressed)

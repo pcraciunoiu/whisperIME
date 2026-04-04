@@ -33,9 +33,9 @@ import com.github.houbb.opencc4j.util.ZhConverterUtil;
 import com.whispertflite.asr.Recorder;
 import com.whispertflite.asr.Whisper;
 import com.whispertflite.asr.WhisperResult;
-import com.whispertflite.parakeet.ParakeetModelFiles;
-import com.whispertflite.parakeet.ParakeetPreferences;
-import com.whispertflite.parakeet.ParakeetStreamingRecorder;
+import com.whispertflite.moonshine.MoonshineHoldRecorder;
+import com.whispertflite.moonshine.MoonshineModelFiles;
+import com.whispertflite.moonshine.MoonshinePreferences;
 import com.whispertflite.utils.HapticFeedback;
 import com.whispertflite.utils.InputLang;
 
@@ -56,9 +56,9 @@ public class WhisperRecognizeActivity extends AppCompatActivity {
     private Context mContext;
     private CountDownTimer countDownTimer;
     private boolean modeAuto = false;
-    private ParakeetStreamingRecorder parakeetOverlayRecorder = null;
+    private MoonshineHoldRecorder moonshineOverlayRecorder = null;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
-    private boolean parakeetOverlayMode = false;
+    private boolean moonshineOverlayMode = false;
 
     @SuppressLint("ClickableViewAccessibility")
     @Override
@@ -66,11 +66,12 @@ public class WhisperRecognizeActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         mContext = this;
         sp = PreferenceManager.getDefaultSharedPreferences(this);
+        MoonshinePreferences.migrateFromParakeetKeys(this);
         sdcardDataFolder = this.getExternalFilesDir(null);
         selectedTfliteFile = new File(sdcardDataFolder, sp.getString("modelName", MULTI_LINGUAL_TOP_WORLD_SLOW));
-        parakeetOverlayMode = ParakeetPreferences.useParakeetMain(mContext)
-                && ParakeetModelFiles.allOnnxPresent(sdcardDataFolder);
-        if (!parakeetOverlayMode && !selectedTfliteFile.exists()) {
+        moonshineOverlayMode = MoonshinePreferences.useMoonshineMain(mContext)
+                && MoonshineModelFiles.allModelFilesPresent(mContext);
+        if (!moonshineOverlayMode && !selectedTfliteFile.exists()) {
             Intent intent = new Intent(this, DownloadActivity.class);
             intent.addFlags(FLAG_ACTIVITY_NEW_TASK);
             startActivity(intent);
@@ -90,7 +91,7 @@ public class WhisperRecognizeActivity extends AppCompatActivity {
             Log.d("WhisperRecognition","StartListening, no language specified");
         }
 
-        if (!parakeetOverlayMode) {
+        if (!moonshineOverlayMode) {
             initModel(selectedTfliteFile, langToken);
         }
 
@@ -134,7 +135,7 @@ public class WhisperRecognizeActivity extends AppCompatActivity {
 
         });
 
-        if (modeAuto && !parakeetOverlayMode) {
+        if (modeAuto && !moonshineOverlayMode) {
             btnRecord.setVisibility(View.GONE);
             HapticFeedback.vibrate(this);
             startRecording();
@@ -163,16 +164,16 @@ public class WhisperRecognizeActivity extends AppCompatActivity {
         });
 
         btnRecord.setOnTouchListener((v, event) -> {
-            if (parakeetOverlayMode) {
+            if (moonshineOverlayMode) {
                 if (event.getAction() == MotionEvent.ACTION_DOWN) {
                     runOnUiThread(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background_pressed));
                     if (checkRecordPermission()) {
                         HapticFeedback.vibrate(this);
-                        parakeetOverlayRecorder = new ParakeetStreamingRecorder(mContext, sdcardDataFolder, mainHandler,
+                        moonshineOverlayRecorder = new MoonshineHoldRecorder(mContext, mainHandler,
                                 partial -> { /* overlay has no live text field */ });
-                        if (!parakeetOverlayRecorder.start()) {
-                            parakeetOverlayRecorder = null;
-                            Toast.makeText(mContext, R.string.parakeet_start_failed, Toast.LENGTH_SHORT).show();
+                        if (!moonshineOverlayRecorder.start()) {
+                            moonshineOverlayRecorder = null;
+                            Toast.makeText(mContext, R.string.moonshine_start_failed, Toast.LENGTH_SHORT).show();
                         }
                         runOnUiThread(() -> processingBar.setProgress(100));
                         countDownTimer = new CountDownTimer(30000, 1000) {
@@ -189,9 +190,9 @@ public class WhisperRecognizeActivity extends AppCompatActivity {
                     runOnUiThread(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background));
                     if (countDownTimer != null) countDownTimer.cancel();
                     runOnUiThread(() -> processingBar.setProgress(0));
-                    if (parakeetOverlayRecorder != null) {
-                        String fin = parakeetOverlayRecorder.stop();
-                        parakeetOverlayRecorder = null;
+                    if (moonshineOverlayRecorder != null) {
+                        String fin = moonshineOverlayRecorder.stop();
+                        moonshineOverlayRecorder = null;
                         if (fin.trim().length() > 0) sendResult(fin.trim());
                         else Toast.makeText(mContext, R.string.error_no_input, Toast.LENGTH_SHORT).show();
                     }
@@ -230,9 +231,9 @@ public class WhisperRecognizeActivity extends AppCompatActivity {
         });
 
         btnCancel.setOnClickListener(v -> {
-            if (parakeetOverlayRecorder != null) {
-                parakeetOverlayRecorder.stop();
-                parakeetOverlayRecorder = null;
+            if (moonshineOverlayRecorder != null) {
+                moonshineOverlayRecorder.stop();
+                moonshineOverlayRecorder = null;
             }
             if (mWhisper != null) stopTranscription();
             setResult(RESULT_CANCELED, null);
@@ -321,9 +322,9 @@ public class WhisperRecognizeActivity extends AppCompatActivity {
 
     @Override
     public void onDestroy() {
-        if (parakeetOverlayRecorder != null) {
-            parakeetOverlayRecorder.stop();
-            parakeetOverlayRecorder = null;
+        if (moonshineOverlayRecorder != null) {
+            moonshineOverlayRecorder.stop();
+            moonshineOverlayRecorder = null;
         }
         deinitModel();
         if (mRecorder != null && mRecorder.isInProgress()) {
