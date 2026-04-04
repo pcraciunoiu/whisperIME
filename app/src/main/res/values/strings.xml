@@ -6,7 +6,13 @@
     <string name="error_download">Download error</string>
     <string name="download_model">Download Model</string>
     <string name="download_model_text">\nDownload Whisper models from Hugging Face (~435 MB)</string>
+    <string name="download_model_text_parakeet">\nDownload Parakeet ONNX models from Hugging Face (~650 MB). English streaming; separate from Whisper.</string>
+    <string name="model_choice_whisper">Whisper (TFLite)</string>
+    <string name="model_choice_parakeet">Parakeet (ONNX)</string>
+    <string name="wizard_model_type">Model type</string>
     <string name="select_model">Model:</string>
+    <string name="main_model_parakeet">Parakeet (ONNX, English streaming)</string>
+    <string name="parakeet_asr_model">Parakeet (streaming, English)</string>
     <string name="status">Status:</string>
     <string name="append">Append:</string>
     <string name="translate">Translate to English:</string>
@@ -38,4 +44,15 @@
     <string name="auto_button">automatic mode</string>
     <string name="error_no_input">No voice input received</string>
     <string name="auto_lang">Detect language</string>
+    <string name="parakeet_poc_title">Parakeet streaming (English, beta)</string>
+    <string name="parakeet_download_models">Download Parakeet ONNX (~650 MB)</string>
+    <string name="parakeet_models_ready">Parakeet encoder/decoder present.</string>
+    <string name="parakeet_models_missing">Parakeet models not installed. Download first.</string>
+    <string name="parakeet_hold_mic">Hold the microphone to stream dictation.</string>
+    <string name="parakeet_use_main">Use Parakeet on main screen (English)</string>
+    <string name="parakeet_use_ime">Use Parakeet in keyboard (IME)</string>
+    <string name="parakeet_use_voice_input">Use Parakeet for system voice input</string>
+    <string name="parakeet_start_failed">Could not start Parakeet (permission or models).</string>
+    <string name="parakeet_info_long_press">Long-press ℹ️ for Parakeet POC</string>
+    <string name="whisper_model_missing">Whisper TFLite model is not installed. Download it from the setup screen or turn off “Use Parakeet on main screen”.</string>
 </resources>

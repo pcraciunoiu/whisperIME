@@ -13,6 +13,8 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.os.CountDownTimer;
+import android.os.Handler;
+import android.os.Looper;
 import android.speech.RecognizerIntent;
 import android.util.Log;
 import android.view.Gravity;
@@ -31,6 +33,9 @@ import com.github.houbb.opencc4j.util.ZhConverterUtil;
 import com.whispertflite.asr.Recorder;
 import com.whispertflite.asr.Whisper;
 import com.whispertflite.asr.WhisperResult;
+import com.whispertflite.parakeet.ParakeetModelFiles;
+import com.whispertflite.parakeet.ParakeetPreferences;
+import com.whispertflite.parakeet.ParakeetStreamingRecorder;
 import com.whispertflite.utils.HapticFeedback;
 import com.whispertflite.utils.InputLang;
 
@@ -51,6 +56,9 @@ public class WhisperRecognizeActivity extends AppCompatActivity {
     private Context mContext;
     private CountDownTimer countDownTimer;
     private boolean modeAuto = false;
+    private ParakeetStreamingRecorder parakeetOverlayRecorder = null;
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private boolean parakeetOverlayMode = false;
 
     @SuppressLint("ClickableViewAccessibility")
     @Override
@@ -60,11 +68,14 @@ public class WhisperRecognizeActivity extends AppCompatActivity {
         sp = PreferenceManager.getDefaultSharedPreferences(this);
         sdcardDataFolder = this.getExternalFilesDir(null);
         selectedTfliteFile = new File(sdcardDataFolder, sp.getString("modelName", MULTI_LINGUAL_TOP_WORLD_SLOW));
-        if (!selectedTfliteFile.exists()) {
+        parakeetOverlayMode = ParakeetPreferences.useParakeetMain(mContext)
+                && ParakeetModelFiles.allOnnxPresent(sdcardDataFolder);
+        if (!parakeetOverlayMode && !selectedTfliteFile.exists()) {
             Intent intent = new Intent(this, DownloadActivity.class);
             intent.addFlags(FLAG_ACTIVITY_NEW_TASK);
             startActivity(intent);
             finish();
+            return;
         }
         String targetLang = getIntent().getStringExtra(RecognizerIntent.EXTRA_LANGUAGE);
         String langCode = sp.getString("language", "auto");
@@ -79,7 +90,9 @@ public class WhisperRecognizeActivity extends AppCompatActivity {
             Log.d("WhisperRecognition","StartListening, no language specified");
         }
 
-        initModel(selectedTfliteFile, langToken);
+        if (!parakeetOverlayMode) {
+            initModel(selectedTfliteFile, langToken);
+        }
 
         setContentView(R.layout.activity_recognize);
 
@@ -121,7 +134,7 @@ public class WhisperRecognizeActivity extends AppCompatActivity {
 
         });
 
-        if (modeAuto) {
+        if (modeAuto && !parakeetOverlayMode) {
             btnRecord.setVisibility(View.GONE);
             HapticFeedback.vibrate(this);
             startRecording();
@@ -150,6 +163,41 @@ public class WhisperRecognizeActivity extends AppCompatActivity {
         });
 
         btnRecord.setOnTouchListener((v, event) -> {
+            if (parakeetOverlayMode) {
+                if (event.getAction() == MotionEvent.ACTION_DOWN) {
+                    runOnUiThread(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background_pressed));
+                    if (checkRecordPermission()) {
+                        HapticFeedback.vibrate(this);
+                        parakeetOverlayRecorder = new ParakeetStreamingRecorder(mContext, sdcardDataFolder, mainHandler,
+                                partial -> { /* overlay has no live text field */ });
+                        if (!parakeetOverlayRecorder.start()) {
+                            parakeetOverlayRecorder = null;
+                            Toast.makeText(mContext, R.string.parakeet_start_failed, Toast.LENGTH_SHORT).show();
+                        }
+                        runOnUiThread(() -> processingBar.setProgress(100));
+                        countDownTimer = new CountDownTimer(30000, 1000) {
+                            @Override
+                            public void onTick(long l) {
+                                runOnUiThread(() -> processingBar.setProgress((int) (l / 300)));
+                            }
+                            @Override
+                            public void onFinish() {}
+                        };
+                        countDownTimer.start();
+                    }
+                } else if (event.getAction() == MotionEvent.ACTION_UP) {
+                    runOnUiThread(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background));
+                    if (countDownTimer != null) countDownTimer.cancel();
+                    runOnUiThread(() -> processingBar.setProgress(0));
+                    if (parakeetOverlayRecorder != null) {
+                        String fin = parakeetOverlayRecorder.stop();
+                        parakeetOverlayRecorder = null;
+                        if (fin.trim().length() > 0) sendResult(fin.trim());
+                        else Toast.makeText(mContext, R.string.error_no_input, Toast.LENGTH_SHORT).show();
+                    }
+                }
+                return true;
+            }
             if (event.getAction() == MotionEvent.ACTION_DOWN) {
                 // Pressed
                 runOnUiThread(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background_pressed));
@@ -182,6 +230,10 @@ public class WhisperRecognizeActivity extends AppCompatActivity {
         });
 
         btnCancel.setOnClickListener(v -> {
+            if (parakeetOverlayRecorder != null) {
+                parakeetOverlayRecorder.stop();
+                parakeetOverlayRecorder = null;
+            }
             if (mWhisper != null) stopTranscription();
             setResult(RESULT_CANCELED, null);
             finish();
@@ -249,7 +301,7 @@ public class WhisperRecognizeActivity extends AppCompatActivity {
 
     private void stopTranscription() {
         runOnUiThread(() -> processingBar.setIndeterminate(false));
-        mWhisper.stop();
+        if (mWhisper != null) mWhisper.stop();
     }
 
     private boolean checkRecordPermission() {
@@ -269,6 +321,10 @@ public class WhisperRecognizeActivity extends AppCompatActivity {
 
     @Override
     public void onDestroy() {
+        if (parakeetOverlayRecorder != null) {
+            parakeetOverlayRecorder.stop();
+            parakeetOverlayRecorder = null;
+        }
         deinitModel();
         if (mRecorder != null && mRecorder.isInProgress()) {
             mRecorder.stop();

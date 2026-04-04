@@ -12,6 +12,8 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.CountDownTimer;
+import android.os.Handler;
+import android.os.Looper;
 import androidx.appcompat.app.AppCompatDelegate;
 import androidx.preference.PreferenceManager;
 import android.provider.Settings;
@@ -44,6 +46,11 @@ import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.whispertflite.asr.Recorder;
 import com.whispertflite.asr.Whisper;
 import com.whispertflite.asr.WhisperResult;
+import com.whispertflite.parakeet.ParakeetConstants;
+import com.whispertflite.parakeet.ParakeetModelFiles;
+import com.whispertflite.parakeet.ParakeetPocActivity;
+import com.whispertflite.parakeet.ParakeetPreferences;
+import com.whispertflite.parakeet.ParakeetStreamingRecorder;
 import com.whispertflite.utils.HapticFeedback;
 import com.whispertflite.utils.InputLang;
 import com.whispertflite.utils.LanguagePairAdapter;
@@ -88,6 +95,8 @@ public class MainActivity extends AppCompatActivity {
 
     private Recorder mRecorder = null;
     private Whisper mWhisper = null;
+    private ParakeetStreamingRecorder parakeetMainRecorder = null;
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     private File sdcardDataFolder = null;
     private File selectedTfliteFile = null;
@@ -101,6 +110,10 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
+        if (parakeetMainRecorder != null) {
+            parakeetMainRecorder.stop();
+            parakeetMainRecorder = null;
+        }
         deinitModel();
         deinitTTS();
         super.onDestroy();
@@ -158,12 +171,27 @@ public class MainActivity extends AppCompatActivity {
         sdcardDataFolder = this.getExternalFilesDir(null);
 
         ArrayList<File> tfliteFiles = getFilesWithExtension(sdcardDataFolder, ".tflite");
+        boolean showParakeetInModelSpinner = ParakeetPreferences.useParakeetMain(this)
+                && ParakeetModelFiles.allOnnxPresent(sdcardDataFolder);
+        if (showParakeetInModelSpinner) {
+            tfliteFiles.add(0, new File(sdcardDataFolder, ParakeetConstants.MAIN_SCREEN_SPINNER_SENTINEL));
+        }
 
-        // Initialize default model to use
-        initModel();
+        // Initialize Whisper unless Parakeet-only main (ONNX present, no TFLite file yet)
+        File initModelFile = new File(sdcardDataFolder, sp.getString("modelName", MULTI_LINGUAL_TOP_WORLD_SLOW));
+        boolean skipWhisperInit = ParakeetPreferences.useParakeetMain(this)
+                && ParakeetModelFiles.allOnnxPresent(sdcardDataFolder)
+                && !initModelFile.isFile();
+        if (!skipWhisperInit) {
+            initModel();
+        }
 
         btnInfo = findViewById(R.id.btnInfo);
         btnInfo.setOnClickListener(view -> startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/woheller69/whisperIME#Donate"))));
+        btnInfo.setOnLongClickListener(v -> {
+            startActivity(new Intent(this, ParakeetPocActivity.class));
+            return true;
+        });
 
         spinnerLanguage = findViewById(R.id.spnrLanguage);
         List<Pair<String, String>> languagePairs = LanguagePairAdapter.getLanguagePairs(this);
@@ -189,34 +217,40 @@ public class MainActivity extends AppCompatActivity {
         selectedTfliteFile = new File(sdcardDataFolder, sp.getString("modelName", MULTI_LINGUAL_TOP_WORLD_SLOW));
         ArrayAdapter<File> tfliteAdapter = getFileArrayAdapter(tfliteFiles);
         int position = tfliteAdapter.getPosition(selectedTfliteFile);
+        if (position < 0 && showParakeetInModelSpinner) {
+            File parakeetChoice = new File(sdcardDataFolder, ParakeetConstants.MAIN_SCREEN_SPINNER_SENTINEL);
+            position = tfliteAdapter.getPosition(parakeetChoice);
+            if (position >= 0) {
+                selectedTfliteFile = parakeetChoice;
+                sp.edit().putString("modelName", ParakeetConstants.MAIN_SCREEN_SPINNER_SENTINEL).apply();
+            }
+        }
         spinnerTflite = findViewById(R.id.spnrTfliteFiles);
         spinnerTflite.setAdapter(tfliteAdapter);
-        spinnerTflite.setSelection(position,false);
-        if (selectedTfliteFile.getName().equals(MULTI_LINGUAL_EU_MODEL_FAST) || selectedTfliteFile.getName().equals(MULTI_LINGUAL_TOP_WORLD_FAST) || selectedTfliteFile.getName().equals(MULTI_LINGUAL_TOP_WORLD_SLOW)){
-            spinnerLanguage.setEnabled(true);
-            String langCode = sp.getString("language", "auto");
-            spinnerLanguage.setSelection(languagePairAdapter.getIndexByCode(langCode));
+        if (tfliteFiles.isEmpty()) {
+            spinnerTflite.setEnabled(false);
         } else {
-            spinnerLanguage.setSelection(0);
-            spinnerLanguage.setEnabled(false);
+            spinnerTflite.setEnabled(true);
+            spinnerTflite.setSelection(position >= 0 ? position : 0, false);
+            if (position < 0) {
+                selectedTfliteFile = tfliteAdapter.getItem(0);
+                sp.edit().putString("modelName", selectedTfliteFile.getName()).apply();
+            }
         }
+        applyLanguageSpinnerForModelChoice(selectedTfliteFile, languagePairAdapter);
         spinnerTflite.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                deinitModel();
                 selectedTfliteFile = (File) parent.getItemAtPosition(position);
                 SharedPreferences.Editor editor = sp.edit();
                 editor.putString("modelName",selectedTfliteFile.getName());
                 editor.apply();
-                initModel();
-                if (selectedTfliteFile.getName().equals(MULTI_LINGUAL_EU_MODEL_FAST) || selectedTfliteFile.getName().equals(MULTI_LINGUAL_TOP_WORLD_FAST) || selectedTfliteFile.getName().equals(MULTI_LINGUAL_TOP_WORLD_SLOW)){
-                    spinnerLanguage.setEnabled(true);
-                    String langCode = sp.getString("language", "auto");
-                    spinnerLanguage.setSelection(languagePairAdapter.getIndexByCode(langCode));
+                if (ParakeetConstants.MAIN_SCREEN_SPINNER_SENTINEL.equals(selectedTfliteFile.getName())) {
+                    deinitModel();
                 } else {
-                    spinnerLanguage.setSelection(0);
-                    spinnerLanguage.setEnabled(false);
+                    initModel();
                 }
+                applyLanguageSpinnerForModelChoice(selectedTfliteFile, languagePairAdapter);
             }
 
             @Override
@@ -230,10 +264,60 @@ public class MainActivity extends AppCompatActivity {
         btnRecord = findViewById(R.id.btnRecord);
 
         btnRecord.setOnTouchListener((v, event) -> {
+            boolean parakeetMain = ParakeetPreferences.useParakeetMain(mContext)
+                    && ParakeetModelFiles.allOnnxPresent(sdcardDataFolder);
+            if (parakeetMain) {
+                if (event.getAction() == MotionEvent.ACTION_DOWN) {
+                    runOnUiThread(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background_pressed));
+                    if (!ParakeetModelFiles.allOnnxPresent(sdcardDataFolder)) {
+                        Toast.makeText(this, R.string.parakeet_models_missing, Toast.LENGTH_LONG).show();
+                        return true;
+                    }
+                    HapticFeedback.vibrate(this);
+                    if (!append.isChecked()) runOnUiThread(() -> tvResult.setText(""));
+                    startTime = System.currentTimeMillis();
+                    parakeetMainRecorder = new ParakeetStreamingRecorder(mContext, sdcardDataFolder, mainHandler,
+                            partial -> runOnUiThread(() -> tvResult.setText(partial)));
+                    if (!parakeetMainRecorder.start()) {
+                        Toast.makeText(this, R.string.parakeet_start_failed, Toast.LENGTH_SHORT).show();
+                        parakeetMainRecorder = null;
+                    }
+                    runOnUiThread(() -> processingBar.setProgress(100));
+                    countDownTimer = new CountDownTimer(30000, 1000) {
+                        @Override
+                        public void onTick(long l) {
+                            runOnUiThread(() -> processingBar.setProgress((int) (l / 300)));
+                        }
+                        @Override
+                        public void onFinish() {}
+                    };
+                    countDownTimer.start();
+                } else if (event.getAction() == MotionEvent.ACTION_UP) {
+                    runOnUiThread(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background));
+                    if (countDownTimer != null) countDownTimer.cancel();
+                    runOnUiThread(() -> processingBar.setProgress(0));
+                    if (parakeetMainRecorder != null) {
+                        String fin = parakeetMainRecorder.stop();
+                        parakeetMainRecorder = null;
+                        long elapsed = System.currentTimeMillis() - startTime;
+                        runOnUiThread(() -> {
+                            if (append.isChecked()) tvResult.append(fin + " ");
+                            else tvResult.setText(fin);
+                            tvStatus.setText(getString(R.string.processing_done) + elapsed + "\u2009ms\n"
+                                    + getString(R.string.language) + " " + getString(R.string.parakeet_asr_model));
+                        });
+                    }
+                }
+                return true;
+            }
             if (event.getAction() == MotionEvent.ACTION_DOWN) {
                 // Pressed
                 runOnUiThread(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background_pressed));
                 Log.d(TAG, "Start recording...");
+                if (mWhisper == null) {
+                    Toast.makeText(this, R.string.whisper_model_missing, Toast.LENGTH_SHORT).show();
+                    return true;
+                }
                 if (!mWhisper.isInProgress()) {
                     HapticFeedback.vibrate(this);
                     startRecording();
@@ -347,6 +431,10 @@ public class MainActivity extends AppCompatActivity {
     // Model initialization
     private void initModel() {
         File modelFile = new File(sdcardDataFolder, sp.getString("modelName", MULTI_LINGUAL_TOP_WORLD_SLOW));
+        if (ParakeetConstants.MAIN_SCREEN_SPINNER_SENTINEL.equals(modelFile.getName())) {
+            deinitModel();
+            return;
+        }
         boolean isMultilingualModel = !(modelFile.getName().endsWith(ENGLISH_ONLY_MODEL_EXTENSION));
         String vocabFileName = isMultilingualModel ? MULTILINGUAL_VOCAB_FILE : ENGLISH_ONLY_VOCAB_FILE;
         File vocabFile = new File(sdcardDataFolder, vocabFileName);
@@ -396,6 +484,24 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private void applyLanguageSpinnerForModelChoice(File modelChoice, LanguagePairAdapter languagePairAdapter) {
+        String name = modelChoice.getName();
+        if (ParakeetConstants.MAIN_SCREEN_SPINNER_SENTINEL.equals(name)
+                || name.equals(ENGLISH_ONLY_MODEL)) {
+            spinnerLanguage.setSelection(0);
+            spinnerLanguage.setEnabled(false);
+            return;
+        }
+        if (name.equals(MULTI_LINGUAL_EU_MODEL_FAST) || name.equals(MULTI_LINGUAL_TOP_WORLD_FAST) || name.equals(MULTI_LINGUAL_TOP_WORLD_SLOW)) {
+            spinnerLanguage.setEnabled(true);
+            String langCode = sp.getString("language", "auto");
+            spinnerLanguage.setSelection(languagePairAdapter.getIndexByCode(langCode));
+        } else {
+            spinnerLanguage.setSelection(0);
+            spinnerLanguage.setEnabled(false);
+        }
+    }
+
     private void deinitTTS(){
         if (tts != null) {
             tts.stop();
@@ -421,6 +527,8 @@ public class MainActivity extends AppCompatActivity {
                     textView.setText(R.string.multi_lingual_fast);
                 else if ((getItem(position).getName()).equals(MULTI_LINGUAL_TOP_WORLD_FAST))
                     textView.setText(R.string.multi_lingual_fast);
+                else if (ParakeetConstants.MAIN_SCREEN_SPINNER_SENTINEL.equals(getItem(position).getName()))
+                    textView.setText(R.string.main_model_parakeet);
                 else
                     textView.setText(getItem(position).getName().substring(0, getItem(position).getName().length() - ".tflite".length()));
 
@@ -443,6 +551,8 @@ public class MainActivity extends AppCompatActivity {
                     textView.setText(R.string.multi_lingual_fast);
                 else if ((getItem(position).getName()).equals(MULTI_LINGUAL_TOP_WORLD_FAST))
                     textView.setText(R.string.multi_lingual_fast);
+                else if (ParakeetConstants.MAIN_SCREEN_SPINNER_SENTINEL.equals(getItem(position).getName()))
+                    textView.setText(R.string.main_model_parakeet);
                 else
                     textView.setText(getItem(position).getName().substring(0, getItem(position).getName().length() - ".tflite".length()));
 
@@ -489,6 +599,10 @@ public class MainActivity extends AppCompatActivity {
 
     // Transcription calls
     private void startProcessing(Whisper.Action action) {
+        if (mWhisper == null) {
+            Toast.makeText(this, R.string.whisper_model_missing, Toast.LENGTH_SHORT).show();
+            return;
+        }
         if (countDownTimer!=null) { countDownTimer.cancel();}
         runOnUiThread(() -> {
             processingBar.setProgress(0);
@@ -501,6 +615,10 @@ public class MainActivity extends AppCompatActivity {
 
     private void stopProcessing() {
         processingBar.setIndeterminate(false);
+        if (parakeetMainRecorder != null) {
+            parakeetMainRecorder.stop();
+            parakeetMainRecorder = null;
+        }
         if (mWhisper != null && mWhisper.isInProgress()) mWhisper.stop();
     }
 
