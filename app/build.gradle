@@ -70,9 +70,11 @@ dependencies {
     implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.8.7'
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1'
 
-    implementation 'ai.moonshine:moonshine-voice:0.0.51'
     implementation 'org.apache.commons:commons-compress:1.27.1'
+    // Microsoft ORT must appear before moonshine-voice so merged libonnxruntime.so matches
+    // libonnxruntime4j_jni.so (Parakeet). Moonshine's bundled ORT is older and lacks OrtGetApiBase.
     implementation 'com.microsoft.onnxruntime:onnxruntime-android:1.19.2'
+    implementation 'ai.moonshine:moonshine-voice:0.0.51'
 
     // Main TensorFlow Lite library
     //noinspection GradleDependency: Crash with 2.16.1, nonsense output with com.google.ai.edge.litert:litert:1.0.1

@@ -299,23 +299,31 @@ public class MainActivity extends AppCompatActivity {
         btnRecord.setOnTouchListener((v, event) -> {
             String eng = AsrEnginePreferences.mainEngine(MainActivity.this);
             if (AsrEnginePreferences.MOONSHINE.equals(eng)) {
+                boolean moonshineLive = liveTranscribe.isChecked();
                 if (event.getAction() == MotionEvent.ACTION_DOWN) {
                     runOnUiThread(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background_pressed));
                     if (!ensureEngineModelsReady()) return true;
                     HapticFeedback.vibrate(this);
+                    final String liveAppendPrefix = (moonshineLive && append.isChecked())
+                            ? tvResult.getText().toString()
+                            : null;
                     if (!append.isChecked()) runOnUiThread(() -> tvResult.setText(""));
                     startTime = System.currentTimeMillis();
                     moonshineMainRecorder = new MoonshineHoldRecorder(mContext, mainHandler,
-                            partial -> runOnUiThread(() -> tvResult.setText(partial)));
+                            partial -> runOnUiThread(() -> {
+                                if (!moonshineLive) return;
+                                if (liveAppendPrefix != null) tvResult.setText(liveAppendPrefix + partial);
+                                else tvResult.setText(partial);
+                            }), moonshineLive);
                     if (!moonshineMainRecorder.start()) {
                         Toast.makeText(this, R.string.moonshine_start_failed, Toast.LENGTH_SHORT).show();
                         moonshineMainRecorder = null;
                     }
                     runOnUiThread(() -> processingBar.setProgress(100));
-                    countDownTimer = new CountDownTimer(30000, 1000) {
+                    countDownTimer = new CountDownTimer(RecordingTimings.HOLD_TO_TALK_MAX_MS, 1000) {
                         @Override
                         public void onTick(long l) {
-                            runOnUiThread(() -> processingBar.setProgress((int) (l / 300)));
+                            runOnUiThread(() -> processingBar.setProgress((int) (l / RecordingTimings.COUNTDOWN_PROGRESS_DIVISOR_MS)));
                         }
                         @Override
                         public void onFinish() {}
@@ -329,9 +337,17 @@ public class MainActivity extends AppCompatActivity {
                         String fin = moonshineMainRecorder.stop();
                         moonshineMainRecorder = null;
                         long elapsed = System.currentTimeMillis() - startTime;
+                        boolean liveNow = liveTranscribe.isChecked();
                         runOnUiThread(() -> {
-                            if (append.isChecked()) tvResult.append(fin + " ");
-                            else tvResult.setText(fin);
+                            if (!liveNow) {
+                                if (append.isChecked()) tvResult.append(fin + " ");
+                                else tvResult.setText(fin);
+                            } else if (append.isChecked() && !fin.trim().isEmpty()) {
+                                CharSequence cur = tvResult.getText();
+                                if (cur.length() > 0 && cur.charAt(cur.length() - 1) != ' ') {
+                                    tvResult.append(" ");
+                                }
+                            }
                             tvStatus.setText(getString(R.string.processing_done) + elapsed + "\u2009ms\n"
                                     + getString(R.string.language) + " " + getString(R.string.moonshine_asr_model));
                         });
@@ -345,12 +361,18 @@ public class MainActivity extends AppCompatActivity {
                     runOnUiThread(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background_pressed));
                     if (!ensureEngineModelsReady()) return true;
                     HapticFeedback.vibrate(this);
+                    final String liveAppendPrefix = (live && append.isChecked())
+                            ? tvResult.getText().toString()
+                            : null;
                     if (!append.isChecked()) runOnUiThread(() -> tvResult.setText(""));
                     startTime = System.currentTimeMillis();
                     parakeetMainRecorder = new ParakeetStreamingRecorder(mContext, sdcardDataFolder, mainHandler,
                             partial -> {
                                 if (live) {
-                                    runOnUiThread(() -> tvResult.setText(partial));
+                                    runOnUiThread(() -> {
+                                        if (liveAppendPrefix != null) tvResult.setText(liveAppendPrefix + partial);
+                                        else tvResult.setText(partial);
+                                    });
                                 }
                             });
                     if (!parakeetMainRecorder.start()) {
@@ -358,10 +380,10 @@ public class MainActivity extends AppCompatActivity {
                         parakeetMainRecorder = null;
                     }
                     runOnUiThread(() -> processingBar.setProgress(100));
-                    countDownTimer = new CountDownTimer(30000, 1000) {
+                    countDownTimer = new CountDownTimer(RecordingTimings.HOLD_TO_TALK_MAX_MS, 1000) {
                         @Override
                         public void onTick(long l) {
-                            runOnUiThread(() -> processingBar.setProgress((int) (l / 300)));
+                            runOnUiThread(() -> processingBar.setProgress((int) (l / RecordingTimings.COUNTDOWN_PROGRESS_DIVISOR_MS)));
                         }
                         @Override
                         public void onFinish() {}
@@ -375,12 +397,16 @@ public class MainActivity extends AppCompatActivity {
                         String fin = parakeetMainRecorder.stop();
                         parakeetMainRecorder = null;
                         long elapsed = System.currentTimeMillis() - startTime;
+                        boolean liveNow = liveTranscribe.isChecked();
                         runOnUiThread(() -> {
-                            if (!live) {
+                            if (!liveNow) {
                                 if (append.isChecked()) tvResult.append(fin + " ");
                                 else tvResult.setText(fin);
-                            } else if (append.isChecked()) {
-                                tvResult.append(fin + " ");
+                            } else if (append.isChecked() && !fin.trim().isEmpty()) {
+                                CharSequence cur = tvResult.getText();
+                                if (cur.length() > 0 && cur.charAt(cur.length() - 1) != ' ') {
+                                    tvResult.append(" ");
+                                }
                             }
                             tvStatus.setText(getString(R.string.processing_done) + elapsed + "\u2009ms\n"
                                     + getString(R.string.language) + " Parakeet (English)");
@@ -405,10 +431,10 @@ public class MainActivity extends AppCompatActivity {
                     HapticFeedback.vibrate(this);
                     startRecording();
                     runOnUiThread(() -> processingBar.setProgress(100));
-                    countDownTimer = new CountDownTimer(30000, 1000) {
+                    countDownTimer = new CountDownTimer(RecordingTimings.HOLD_TO_TALK_MAX_MS, 1000) {
                         @Override
                         public void onTick(long l) {
-                            runOnUiThread(() -> processingBar.setProgress((int) (l / 300)));
+                            runOnUiThread(() -> processingBar.setProgress((int) (l / RecordingTimings.COUNTDOWN_PROGRESS_DIVISOR_MS)));
                         }
                         @Override
                         public void onFinish() {}
@@ -600,7 +626,8 @@ public class MainActivity extends AppCompatActivity {
     private void applyEngineUiMode(String engine) {
         boolean whisper = AsrEnginePreferences.WHISPER.equals(engine);
         layoutWhisperModels.setVisibility(whisper ? View.VISIBLE : View.GONE);
-        boolean liveOk = AsrEnginePreferences.PARAKEET.equals(engine);
+        boolean liveOk = AsrEnginePreferences.PARAKEET.equals(engine)
+                || AsrEnginePreferences.MOONSHINE.equals(engine);
         liveTranscribe.setEnabled(liveOk);
         liveTranscribe.setAlpha(liveOk ? 1f : 0.45f);
     }

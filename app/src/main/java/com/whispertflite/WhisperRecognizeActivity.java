@@ -151,10 +151,10 @@ public class WhisperRecognizeActivity extends AppCompatActivity {
             HapticFeedback.vibrate(this);
             startRecording();
             runOnUiThread(() -> processingBar.setProgress(100));
-            countDownTimer = new CountDownTimer(30000, 1000) {
+            countDownTimer = new CountDownTimer(RecordingTimings.HOLD_TO_TALK_MAX_MS, 1000) {
                 @Override
                 public void onTick(long l) {
-                    runOnUiThread(() -> processingBar.setProgress((int) (l / 300)));
+                    runOnUiThread(() -> processingBar.setProgress((int) (l / RecordingTimings.COUNTDOWN_PROGRESS_DIVISOR_MS)));
                 }
                 @Override
                 public void onFinish() {}
@@ -187,10 +187,10 @@ public class WhisperRecognizeActivity extends AppCompatActivity {
                             Toast.makeText(mContext, R.string.parakeet_start_failed, Toast.LENGTH_SHORT).show();
                         }
                         runOnUiThread(() -> processingBar.setProgress(100));
-                        countDownTimer = new CountDownTimer(30000, 1000) {
+                        countDownTimer = new CountDownTimer(RecordingTimings.HOLD_TO_TALK_MAX_MS, 1000) {
                             @Override
                             public void onTick(long l) {
-                                runOnUiThread(() -> processingBar.setProgress((int) (l / 300)));
+                                runOnUiThread(() -> processingBar.setProgress((int) (l / RecordingTimings.COUNTDOWN_PROGRESS_DIVISOR_MS)));
                             }
                             @Override
                             public void onFinish() {}
@@ -215,17 +215,18 @@ public class WhisperRecognizeActivity extends AppCompatActivity {
                     runOnUiThread(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background_pressed));
                     if (checkRecordPermission()) {
                         HapticFeedback.vibrate(this);
+                        boolean moonshineLive = sp.getBoolean("liveTranscribePartials", false);
                         moonshineOverlayRecorder = new MoonshineHoldRecorder(mContext, mainHandler,
-                                partial -> { /* overlay has no live text field */ });
+                                partial -> { /* overlay has no live text field */ }, moonshineLive);
                         if (!moonshineOverlayRecorder.start()) {
                             moonshineOverlayRecorder = null;
                             Toast.makeText(mContext, R.string.moonshine_start_failed, Toast.LENGTH_SHORT).show();
                         }
                         runOnUiThread(() -> processingBar.setProgress(100));
-                        countDownTimer = new CountDownTimer(30000, 1000) {
+                        countDownTimer = new CountDownTimer(RecordingTimings.HOLD_TO_TALK_MAX_MS, 1000) {
                             @Override
                             public void onTick(long l) {
-                                runOnUiThread(() -> processingBar.setProgress((int) (l / 300)));
+                                runOnUiThread(() -> processingBar.setProgress((int) (l / RecordingTimings.COUNTDOWN_PROGRESS_DIVISOR_MS)));
                             }
                             @Override
                             public void onFinish() {}
@@ -260,10 +261,10 @@ public class WhisperRecognizeActivity extends AppCompatActivity {
                         HapticFeedback.vibrate(this);
                         startRecording();
                         runOnUiThread(() -> processingBar.setProgress(100));
-                        countDownTimer = new CountDownTimer(30000, 1000) {
+                        countDownTimer = new CountDownTimer(RecordingTimings.HOLD_TO_TALK_MAX_MS, 1000) {
                             @Override
                             public void onTick(long l) {
-                                runOnUiThread(() -> processingBar.setProgress((int) (l / 300)));
+                                runOnUiThread(() -> processingBar.setProgress((int) (l / RecordingTimings.COUNTDOWN_PROGRESS_DIVISOR_MS)));
                             }
                             @Override
                             public void onFinish() {}

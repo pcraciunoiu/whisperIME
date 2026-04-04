@@ -10,6 +10,9 @@ package com.whispertflite.moonshine
 object MoonshineConstants {
     const val SAMPLE_RATE = 16_000
 
+    /** Mic capture cap for hold-to-talk (matches UI countdown). */
+    const val MAX_RECORD_SECONDS = 60
+
     /** Must match the AAR / JNI build (see moonshine example MainActivity). */
     const val MODEL_ASSET_SUBDIR = "base-en"
 

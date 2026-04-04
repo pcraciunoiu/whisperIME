@@ -78,9 +78,11 @@ public class WhisperRecognitionService extends RecognitionService {
                 && MoonshineModelFiles.allModelFilesPresent(this);
 
         if (useMoonshine) {
+            boolean moonshineLivePartials = sp.getBoolean("liveTranscribePartials", false);
             Handler mainHandler = new Handler(Looper.getMainLooper());
             moonshineRecognitionRecorder = new MoonshineHoldRecorder(this, mainHandler,
                     partial -> {
+                        if (!moonshineLivePartials) return;
                         try {
                             Bundle b = new Bundle();
                             ArrayList<String> al = new ArrayList<>();
@@ -90,7 +92,7 @@ public class WhisperRecognitionService extends RecognitionService {
                         } catch (RemoteException e) {
                             throw new RuntimeException(e);
                         }
-                    });
+                    }, moonshineLivePartials);
             if (moonshineRecognitionRecorder.start()) {
                 try {
                     callback.beginningOfSpeech();

@@ -16,8 +16,8 @@
     <string name="engine_parakeet">Parakeet (ONNX, English)</string>
     <string name="engine_moonshine">Moonshine Base (English)</string>
     <string name="download_model_text_parakeet">\nDownload Parakeet ONNX models from Hugging Face (~650 MB). English streaming.</string>
-    <string name="live_transcribe">Transcribe live as I speak</string>
-    <string name="live_transcribe_hint">Streaming text while holding (Parakeet). Whisper and Moonshine decode when you release.</string>
+    <string name="live_transcribe">Transcribe live</string>
+    <string name="live_transcribe_hint">Streaming text while holding (Parakeet or Moonshine). Whisper decodes when you release.</string>
     <string name="models_missing_open_download">Models missing. Opening download screen.</string>
     <string name="select_model">Model:</string>
     <string name="main_model_moonshine">Moonshine Base (English)</string>

@@ -101,7 +101,9 @@ class MoonshinePocActivity : AppCompatActivity() {
                     recorder = MoonshineHoldRecorder(
                         this,
                         mainHandler,
-                    ) { partial -> binding.parakeetTranscript.text = partial }
+                        { partial -> binding.parakeetTranscript.text = partial },
+                        false,
+                    )
                     val started = recorder!!.start()
                     if (!started) {
                         Toast.makeText(this, R.string.moonshine_start_failed, Toast.LENGTH_SHORT).show()

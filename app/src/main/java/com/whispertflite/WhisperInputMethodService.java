@@ -225,10 +225,10 @@ public class WhisperInputMethodService extends InputMethodService {
             HapticFeedback.vibrate(this);
             startRecording();
             handler.post(() -> processingBar.setProgress(100));
-            countDownTimer = new CountDownTimer(30000, 1000) {
+            countDownTimer = new CountDownTimer(RecordingTimings.HOLD_TO_TALK_MAX_MS, 1000) {
                 @Override
                 public void onTick(long l) {
-                    handler.post(() -> processingBar.setProgress((int) (l / 300)));
+                    handler.post(() -> processingBar.setProgress((int) (l / RecordingTimings.COUNTDOWN_PROGRESS_DIVISOR_MS)));
                 }
                 @Override
                 public void onFinish() {}
@@ -298,17 +298,18 @@ public class WhisperInputMethodService extends InputMethodService {
                         HapticFeedback.vibrate(this);
                         imeMoonshineRecorder = new MoonshineHoldRecorder(this, handler,
                                 partial -> handler.post(() -> {
+                                    if (!liveImePartials) return;
                                     InputConnection ic = getCurrentInputConnection();
                                     if (ic != null) ic.setComposingText(partial, 1);
-                                }));
+                                }), liveImePartials);
                         if (!imeMoonshineRecorder.start()) {
                             imeMoonshineRecorder = null;
                         }
                         handler.post(() -> processingBar.setProgress(100));
-                        countDownTimer = new CountDownTimer(30000, 1000) {
+                        countDownTimer = new CountDownTimer(RecordingTimings.HOLD_TO_TALK_MAX_MS, 1000) {
                             @Override
                             public void onTick(long l) {
-                                handler.post(() -> processingBar.setProgress((int) (l / 300)));
+                                handler.post(() -> processingBar.setProgress((int) (l / RecordingTimings.COUNTDOWN_PROGRESS_DIVISOR_MS)));
                             }
                             @Override
                             public void onFinish() {}
@@ -326,13 +327,7 @@ public class WhisperInputMethodService extends InputMethodService {
                     if (imeMoonshineRecorder != null) {
                         String fin = imeMoonshineRecorder.stop();
                         imeMoonshineRecorder = null;
-                        handler.post(() -> {
-                            InputConnection ic = getCurrentInputConnection();
-                            if (ic != null) {
-                                ic.finishComposingText();
-                                if (fin.trim().length() > 0) ic.commitText(fin.trim() + " ", 1);
-                            }
-                        });
+                        handler.post(() -> commitHoldTranscription(getCurrentInputConnection(), fin, liveImePartials));
                     }
                 }
                 return true;
@@ -352,10 +347,10 @@ public class WhisperInputMethodService extends InputMethodService {
                             imeParakeetRecorder = null;
                         }
                         handler.post(() -> processingBar.setProgress(100));
-                        countDownTimer = new CountDownTimer(30000, 1000) {
+                        countDownTimer = new CountDownTimer(RecordingTimings.HOLD_TO_TALK_MAX_MS, 1000) {
                             @Override
                             public void onTick(long l) {
-                                handler.post(() -> processingBar.setProgress((int) (l / 300)));
+                                handler.post(() -> processingBar.setProgress((int) (l / RecordingTimings.COUNTDOWN_PROGRESS_DIVISOR_MS)));
                             }
                             @Override
                             public void onFinish() {}
@@ -373,13 +368,7 @@ public class WhisperInputMethodService extends InputMethodService {
                     if (imeParakeetRecorder != null) {
                         String fin = imeParakeetRecorder.stop();
                         imeParakeetRecorder = null;
-                        handler.post(() -> {
-                            InputConnection ic = getCurrentInputConnection();
-                            if (ic != null) {
-                                ic.finishComposingText();
-                                if (fin.trim().length() > 0) ic.commitText(fin.trim() + " ", 1);
-                            }
-                        });
+                        handler.post(() -> commitHoldTranscription(getCurrentInputConnection(), fin, liveImePartials));
                     }
                 }
                 return true;
@@ -402,10 +391,10 @@ public class WhisperInputMethodService extends InputMethodService {
                         HapticFeedback.vibrate(this);
                         startRecording();
                         handler.post(() -> processingBar.setProgress(100));
-                        countDownTimer = new CountDownTimer(30000, 1000) {
+                        countDownTimer = new CountDownTimer(RecordingTimings.HOLD_TO_TALK_MAX_MS, 1000) {
                             @Override
                             public void onTick(long l) {
-                                handler.post(() -> processingBar.setProgress((int) (l / 300)));
+                                handler.post(() -> processingBar.setProgress((int) (l / RecordingTimings.COUNTDOWN_PROGRESS_DIVISOR_MS)));
                             }
                             @Override
                             public void onFinish() {}
@@ -542,6 +531,20 @@ public class WhisperInputMethodService extends InputMethodService {
             tvStatus.setText(getString(R.string.need_record_audio_permission));
         }
         return (permission == PackageManager.PERMISSION_GRANTED);
+    }
+
+    /**
+     * After hold-to-talk, insert final text. With live partials we only use {@link InputConnection#commitText}
+     * so the composing span is replaced once (finishComposingText + commitText duplicated the phrase).
+     */
+    private void commitHoldTranscription(InputConnection ic, String fin, boolean hadLivePartials) {
+        if (ic == null) return;
+        String t = fin.trim();
+        if (t.length() > 0) {
+            ic.commitText(t + " ", 1);
+        } else if (hadLivePartials) {
+            ic.finishComposingText();
+        }
     }
 
     private void deinitModel() {
