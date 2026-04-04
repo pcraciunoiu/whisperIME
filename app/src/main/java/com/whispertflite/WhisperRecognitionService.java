@@ -111,9 +111,11 @@ public class WhisperRecognitionService extends RecognitionService {
         boolean useParakeet = AsrEnginePreferences.PARAKEET.equals(eng)
                 && ParakeetModelFiles.allOnnxPresent(sdcardDataFolder);
         if (useParakeet) {
+            boolean livePartials = sp.getBoolean("liveTranscribePartials", false);
             Handler mainHandler = new Handler(Looper.getMainLooper());
             parakeetRecognitionRecorder = new ParakeetStreamingRecorder(this, sdcardDataFolder, mainHandler,
                     partial -> {
+                        if (!livePartials) return;
                         try {
                             Bundle b = new Bundle();
                             ArrayList<String> al = new ArrayList<>();

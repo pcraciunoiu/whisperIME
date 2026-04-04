@@ -88,6 +88,7 @@ public class MainActivity extends AppCompatActivity {
     private LinearLayout layoutModeChinese;
     private LinearLayout layoutTTS;
     private CheckBox append;
+    private CheckBox liveTranscribe;
     private CheckBox translate;
     private CheckBox modeSimpleChinese;
     private CheckBox modeTTS;
@@ -146,6 +147,10 @@ public class MainActivity extends AppCompatActivity {
         sp = PreferenceManager.getDefaultSharedPreferences(this);
         MoonshinePreferences.migrateFromParakeetKeys(this);
         append = findViewById(R.id.mode_append);
+        liveTranscribe = findViewById(R.id.mode_live_transcribe);
+        liveTranscribe.setChecked(sp.getBoolean("liveTranscribePartials", false));
+        liveTranscribe.setOnCheckedChangeListener((buttonView, isChecked) ->
+                sp.edit().putBoolean("liveTranscribePartials", isChecked).apply());
 
         layoutTTS = findViewById(R.id.layout_tts);
         modeTTS = findViewById(R.id.mode_tts);
@@ -335,7 +340,7 @@ public class MainActivity extends AppCompatActivity {
                 return true;
             }
             if (AsrEnginePreferences.PARAKEET.equals(eng)) {
-                boolean live = sp.getBoolean("liveTranscribePartials", false);
+                boolean live = liveTranscribe.isChecked();
                 if (event.getAction() == MotionEvent.ACTION_DOWN) {
                     runOnUiThread(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background_pressed));
                     if (!ensureEngineModelsReady()) return true;
@@ -374,8 +379,8 @@ public class MainActivity extends AppCompatActivity {
                             if (!live) {
                                 if (append.isChecked()) tvResult.append(fin + " ");
                                 else tvResult.setText(fin);
-                            } else if (append.isChecked() && fin.trim().length() > 0) {
-                                tvResult.append(" ");
+                            } else if (append.isChecked()) {
+                                tvResult.append(fin + " ");
                             }
                             tvStatus.setText(getString(R.string.processing_done) + elapsed + "\u2009ms\n"
                                     + getString(R.string.language) + " Parakeet (English)");
@@ -595,6 +600,9 @@ public class MainActivity extends AppCompatActivity {
     private void applyEngineUiMode(String engine) {
         boolean whisper = AsrEnginePreferences.WHISPER.equals(engine);
         layoutWhisperModels.setVisibility(whisper ? View.VISIBLE : View.GONE);
+        boolean liveOk = AsrEnginePreferences.PARAKEET.equals(engine);
+        liveTranscribe.setEnabled(liveOk);
+        liveTranscribe.setAlpha(liveOk ? 1f : 0.45f);
     }
 
     private void openDownloadForEngine(String engine) {

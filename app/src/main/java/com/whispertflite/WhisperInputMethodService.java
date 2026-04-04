@@ -281,6 +281,7 @@ public class WhisperInputMethodService extends InputMethodService {
         });
 
         btnRecord.setOnTouchListener((v, event) -> {
+            boolean liveImePartials = sp.getBoolean("liveTranscribePartials", false);
             if (useMoonshineImeNow()) {
                 if (event.getAction() == MotionEvent.ACTION_DOWN) {
                     handler.post(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background_pressed));
@@ -334,6 +335,7 @@ public class WhisperInputMethodService extends InputMethodService {
                         HapticFeedback.vibrate(this);
                         imeParakeetRecorder = new ParakeetStreamingRecorder(this, sdcardDataFolder, handler,
                                 partial -> handler.post(() -> {
+                                    if (!liveImePartials) return;
                                     InputConnection ic = getCurrentInputConnection();
                                     if (ic != null) ic.setComposingText(partial, 1);
                                 }));
