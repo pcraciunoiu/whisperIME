@@ -209,6 +209,39 @@
                 android:contentDescription="@string/simple_chinese"/>
 
         </LinearLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/voice_undo_phrases_label"
+            android:textColor="@color/colorAccent"
+            android:textSize="14sp" />
+
+        <EditText
+            android:id="@+id/et_voice_undo_phrases"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="@string/voice_undo_phrases_default"
+            android:inputType="text"
+            android:importantForAutofill="no" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="@string/voice_newline_phrases_label"
+            android:textColor="@color/colorAccent"
+            android:textSize="14sp" />
+
+        <EditText
+            android:id="@+id/et_voice_newline_phrases"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="@string/voice_newline_phrases_default"
+            android:inputType="text"
+            android:importantForAutofill="no" />
+
         <!-- Use ProgressBar as "Space" with same look -->
         <ProgressBar
             android:layout_width="match_parent"

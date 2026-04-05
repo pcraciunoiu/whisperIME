@@ -62,6 +62,7 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 public class MainActivity extends AppCompatActivity {
     private Context mContext;
@@ -110,6 +111,10 @@ public class MainActivity extends AppCompatActivity {
     private int langToken = -1;
     private long startTime = 0;
     private TextToSpeech tts;
+    private EditText etVoiceUndoPhrases;
+    private EditText etVoiceNewlinePhrases;
+    /** Live partial already applied undo/newline; skip duplicate on finger-up. */
+    private boolean mainVoiceCommandConsumed = false;
 
     @Override
     protected void onDestroy() {
@@ -128,8 +133,17 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onPause() {
+        saveVoiceCommandPhrasePrefs();
         stopProcessing();
         super.onPause();
+    }
+
+    private void saveVoiceCommandPhrasePrefs() {
+        if (etVoiceUndoPhrases == null) return;
+        sp.edit()
+                .putString(VoiceCommandPreferences.KEY_UNDO_PHRASES, etVoiceUndoPhrases.getText().toString().trim())
+                .putString(VoiceCommandPreferences.KEY_NEWLINE_PHRASES, etVoiceNewlinePhrases.getText().toString().trim())
+                .apply();
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -149,6 +163,15 @@ public class MainActivity extends AppCompatActivity {
         liveTranscribe.setChecked(sp.getBoolean("liveTranscribePartials", false));
         liveTranscribe.setOnCheckedChangeListener((buttonView, isChecked) ->
                 sp.edit().putBoolean("liveTranscribePartials", isChecked).apply());
+
+        etVoiceUndoPhrases = findViewById(R.id.et_voice_undo_phrases);
+        etVoiceNewlinePhrases = findViewById(R.id.et_voice_newline_phrases);
+        {
+            String savedUndo = sp.getString(VoiceCommandPreferences.KEY_UNDO_PHRASES, null);
+            etVoiceUndoPhrases.setText(savedUndo != null ? savedUndo : getString(R.string.voice_undo_phrases_default));
+            String savedNl = sp.getString(VoiceCommandPreferences.KEY_NEWLINE_PHRASES, null);
+            etVoiceNewlinePhrases.setText(savedNl != null ? savedNl : getString(R.string.voice_newline_phrases_default));
+        }
 
         layoutTTS = findViewById(R.id.layout_tts);
         modeTTS = findViewById(R.id.mode_tts);
@@ -299,6 +322,7 @@ public class MainActivity extends AppCompatActivity {
             if (AsrEnginePreferences.MOONSHINE.equals(eng)) {
                 boolean moonshineLive = liveTranscribe.isChecked();
                 if (event.getAction() == MotionEvent.ACTION_DOWN) {
+                    mainVoiceCommandConsumed = false;
                     runOnUiThread(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background_pressed));
                     if (!ensureEngineModelsReady()) return true;
                     HapticFeedback.vibrate(this);
@@ -310,6 +334,7 @@ public class MainActivity extends AppCompatActivity {
                     moonshineMainRecorder = new MoonshineHoldRecorder(mContext, mainHandler,
                             partial -> runOnUiThread(() -> {
                                 if (!moonshineLive) return;
+                                if (handleLivePartialVoiceCommand(partial, liveAppendPrefix)) return;
                                 if (liveAppendPrefix != null) tvResult.setText(liveAppendPrefix + partial);
                                 else tvResult.setText(partial);
                             }), moonshineLive);
@@ -337,17 +362,7 @@ public class MainActivity extends AppCompatActivity {
                         long elapsed = System.currentTimeMillis() - startTime;
                         boolean liveNow = liveTranscribe.isChecked();
                         runOnUiThread(() -> {
-                            if (!liveNow) {
-                                if (append.isChecked()) tvResult.append(fin + " ");
-                                else tvResult.setText(fin);
-                            } else if (append.isChecked() && !fin.trim().isEmpty()) {
-                                CharSequence cur = tvResult.getText();
-                                if (cur.length() > 0 && cur.charAt(cur.length() - 1) != ' ') {
-                                    tvResult.append(" ");
-                                }
-                            }
-                            tvStatus.setText(getString(R.string.processing_done) + elapsed + "\u2009ms\n"
-                                    + getString(R.string.language) + " " + getString(R.string.moonshine_asr_model));
+                            finishMoonshineOrParakeetHold(fin, liveNow, elapsed, true);
                         });
                     }
                 }
@@ -356,6 +371,7 @@ public class MainActivity extends AppCompatActivity {
             if (AsrEnginePreferences.PARAKEET.equals(eng)) {
                 boolean live = liveTranscribe.isChecked();
                 if (event.getAction() == MotionEvent.ACTION_DOWN) {
+                    mainVoiceCommandConsumed = false;
                     runOnUiThread(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background_pressed));
                     if (!ensureEngineModelsReady()) return true;
                     HapticFeedback.vibrate(this);
@@ -368,6 +384,7 @@ public class MainActivity extends AppCompatActivity {
                             partial -> {
                                 if (live) {
                                     runOnUiThread(() -> {
+                                        if (handleLivePartialVoiceCommand(partial, liveAppendPrefix)) return;
                                         if (liveAppendPrefix != null) tvResult.setText(liveAppendPrefix + partial);
                                         else tvResult.setText(partial);
                                     });
@@ -397,17 +414,7 @@ public class MainActivity extends AppCompatActivity {
                         long elapsed = System.currentTimeMillis() - startTime;
                         boolean liveNow = liveTranscribe.isChecked();
                         runOnUiThread(() -> {
-                            if (!liveNow) {
-                                if (append.isChecked()) tvResult.append(fin + " ");
-                                else tvResult.setText(fin);
-                            } else if (append.isChecked() && !fin.trim().isEmpty()) {
-                                CharSequence cur = tvResult.getText();
-                                if (cur.length() > 0 && cur.charAt(cur.length() - 1) != ' ') {
-                                    tvResult.append(" ");
-                                }
-                            }
-                            tvStatus.setText(getString(R.string.processing_done) + elapsed + "\u2009ms\n"
-                                    + getString(R.string.language) + " Parakeet (English)");
+                            finishMoonshineOrParakeetHold(fin, liveNow, elapsed, false);
                         });
                     }
                 }
@@ -532,6 +539,75 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private boolean applyVoiceCommandToResultIfMatches(String text) {
+        if (text == null) return false;
+        String t = text.trim();
+        if (t.isEmpty()) return false;
+        Set<String> undo = VoiceCommandPreferences.normalizedUndoPhrases(sp);
+        Set<String> nl = VoiceCommandPreferences.normalizedNewlinePhrases(sp);
+        if (ImeTextEditHelper.matchesUndoCommand(t, undo)) {
+            return ImeTextEditHelper.applyUndoToEditText(tvResult);
+        }
+        if (ImeTextEditHelper.matchesNewLineCommand(t, nl)) {
+            return ImeTextEditHelper.applyNewLineToEditText(tvResult);
+        }
+        return false;
+    }
+
+    private boolean handleLivePartialVoiceCommand(String partial, String liveAppendPrefix) {
+        if (partial == null) return false;
+        Set<String> undo = VoiceCommandPreferences.normalizedUndoPhrases(sp);
+        Set<String> nl = VoiceCommandPreferences.normalizedNewlinePhrases(sp);
+        if (ImeTextEditHelper.matchesUndoCommand(partial, undo)) {
+            String base = liveAppendPrefix != null ? liveAppendPrefix : "";
+            tvResult.setText(base);
+            tvResult.setSelection(base.length());
+            ImeTextEditHelper.applyUndoToEditText(tvResult);
+            mainVoiceCommandConsumed = true;
+            return true;
+        }
+        if (ImeTextEditHelper.matchesNewLineCommand(partial, nl)) {
+            String base = liveAppendPrefix != null ? liveAppendPrefix : "";
+            tvResult.setText(base);
+            tvResult.setSelection(base.length());
+            ImeTextEditHelper.applyNewLineToEditText(tvResult);
+            mainVoiceCommandConsumed = true;
+            return true;
+        }
+        return false;
+    }
+
+    private void finishMoonshineOrParakeetHold(String fin, boolean liveNow, long elapsed, boolean moonshine) {
+        Set<String> undo = VoiceCommandPreferences.normalizedUndoPhrases(sp);
+        Set<String> nl = VoiceCommandPreferences.normalizedNewlinePhrases(sp);
+        if (!liveNow) {
+            if (!applyVoiceCommandToResultIfMatches(fin)) {
+                if (append.isChecked()) tvResult.append(fin + " ");
+                else tvResult.setText(fin);
+            }
+        } else {
+            if (ImeTextEditHelper.matchesUndoCommand(fin, undo)) {
+                if (!mainVoiceCommandConsumed) {
+                    ImeTextEditHelper.applyUndoToEditText(tvResult);
+                }
+            } else if (ImeTextEditHelper.matchesNewLineCommand(fin, nl)) {
+                if (!mainVoiceCommandConsumed) {
+                    ImeTextEditHelper.applyNewLineToEditText(tvResult);
+                }
+            } else if (append.isChecked() && !fin.trim().isEmpty()) {
+                CharSequence cur = tvResult.getText();
+                if (cur.length() > 0 && cur.charAt(cur.length() - 1) != ' ') {
+                    tvResult.append(" ");
+                }
+            }
+            mainVoiceCommandConsumed = false;
+        }
+        tvStatus.setText(getString(R.string.processing_done) + elapsed + "\u2009ms\n"
+                + getString(R.string.language) + " " + (moonshine
+                ? getString(R.string.moonshine_asr_model)
+                : "Parakeet (English)"));
+    }
+
     // Model initialization
     private void initModel() {
         if (!AsrEnginePreferences.WHISPER.equals(AsrEnginePreferences.mainEngine(this))) {
@@ -564,10 +640,18 @@ public class MainActivity extends AppCompatActivity {
                     runOnUiThread(() -> layoutModeChinese.setVisibility(View.VISIBLE));
                     boolean simpleChinese = sp.getBoolean("simpleChinese",false);  //convert to desired Chinese mode
                     String result = simpleChinese ? ZhConverterUtil.toSimple(whisperResult.getResult()) : ZhConverterUtil.toTraditional(whisperResult.getResult());
-                    runOnUiThread(() -> tvResult.append(result));
+                    runOnUiThread(() -> {
+                        if (!applyVoiceCommandToResultIfMatches(result)) {
+                            tvResult.append(result);
+                        }
+                    });
                 } else {
                     runOnUiThread(() -> layoutModeChinese.setVisibility(View.GONE));
-                    runOnUiThread(() -> tvResult.append(whisperResult.getResult()));
+                    runOnUiThread(() -> {
+                        if (!applyVoiceCommandToResultIfMatches(whisperResult.getResult())) {
+                            tvResult.append(whisperResult.getResult());
+                        }
+                    });
                 }
                 runOnUiThread(() -> spinnerTflite.setEnabled(true));
                 if (modeTTS.isChecked()){

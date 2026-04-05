@@ -1,12 +1,17 @@
 package com.whispertflite;
 
+import android.text.Editable;
 import android.util.Log;
+import android.widget.EditText;
 import android.view.inputmethod.ExtractedText;
 import android.view.inputmethod.ExtractedTextRequest;
 import android.view.inputmethod.InputConnection;
 
+import java.util.Set;
+
 /**
- * Text operations for {@link WhisperInputMethodService}: word-wise delete and voice "scratch that".
+ * Text operations for {@link WhisperInputMethodService}: word-wise delete and configurable voice commands
+ * (undo last sentence, new line).
  */
 public final class ImeTextEditHelper {
     private static final String TAG = "WhisperIME";
@@ -41,17 +46,10 @@ public final class ImeTextEditHelper {
         return true;
     }
 
-    /**
-     * True if the transcript is only an English undo phrase (optional trailing punctuation).
-     */
-    public static boolean matchesScratchThatCommand(String transcript) {
-        if (transcript == null) return false;
-        String normalized = normalizeScratchPhrase(transcript.trim().toLowerCase());
-        return "scratch that".equals(normalized) || "scratched that".equals(normalized);
-    }
-
     /** Lowercase trim plus strip trailing . ! ? */
-    private static String normalizeScratchPhrase(String t) {
+    public static String normalizeVoiceCommandPhrase(String t) {
+        if (t == null) return "";
+        t = t.trim().toLowerCase();
         if (t.isEmpty()) return t;
         String s = t;
         while (s.length() > 0) {
@@ -63,6 +61,65 @@ public final class ImeTextEditHelper {
             }
         }
         return s;
+    }
+
+    public static boolean matchesUndoCommand(String transcript, Set<String> normalizedPhrases) {
+        if (transcript == null || normalizedPhrases == null || normalizedPhrases.isEmpty()) return false;
+        String normalized = normalizeVoiceCommandPhrase(transcript);
+        return !normalized.isEmpty() && normalizedPhrases.contains(normalized);
+    }
+
+    public static boolean matchesNewLineCommand(String transcript, Set<String> normalizedPhrases) {
+        if (transcript == null || normalizedPhrases == null || normalizedPhrases.isEmpty()) return false;
+        String normalized = normalizeVoiceCommandPhrase(transcript);
+        return !normalized.isEmpty() && normalizedPhrases.contains(normalized);
+    }
+
+    /**
+     * Inserts a newline at the cursor (replaces selection if any).
+     */
+    public static boolean applyNewLine(InputConnection ic) {
+        if (ic == null) return false;
+        ic.beginBatchEdit();
+        try {
+            ic.commitText("\n", 1);
+        } finally {
+            ic.endBatchEdit();
+        }
+        return true;
+    }
+
+    public static boolean applyNewLineToEditText(EditText et) {
+        if (et == null) return false;
+        int start = et.getSelectionStart();
+        int end = et.getSelectionEnd();
+        Editable ed = et.getText();
+        if (ed == null) return false;
+        if (start < 0 || end < 0) {
+            start = end = ed.length();
+        }
+        int a = Math.min(start, end);
+        int b = Math.max(start, end);
+        ed.replace(a, b, "\n");
+        et.setSelection(a + 1);
+        return true;
+    }
+
+    /**
+     * Removes the last sentence before the cursor in an {@link EditText}.
+     */
+    public static boolean applyUndoToEditText(EditText et) {
+        if (et == null) return false;
+        String full = et.getText().toString();
+        int selStart = et.getSelectionStart();
+        int selEnd = et.getSelectionEnd();
+        String newFull = computeUndoReplacementFullText(full, selStart, selEnd);
+        if (newFull == null) return false;
+        int newSel = computeUndoNewCursor(full, selStart, selEnd, newFull);
+        et.setText(newFull);
+        et.setSelection(Math.min(newSel, newFull.length()));
+        Log.d(TAG, "voice undo: applied to EditText");
+        return true;
     }
 
     /**
@@ -103,13 +160,34 @@ public final class ImeTextEditHelper {
             Log.d(TAG, "scratch: fallback before+after len=" + full.length() + " sel=" + selStart);
         }
 
+        String newFull = computeUndoReplacementFullText(full, selStart, selEnd);
+        if (newFull == null) {
+            Log.d(TAG, "scratch: no change (empty or no sentence to drop)");
+            return false;
+        }
+        ic.beginBatchEdit();
+        try {
+            ic.deleteSurroundingText(selStart, full.length() - selStart);
+            ic.commitText(newFull, 1);
+        } finally {
+            ic.endBatchEdit();
+        }
+        Log.d(TAG, "scratch: applied");
+        return true;
+    }
+
+    /**
+     * @return full document text after undo, or null if nothing to change
+     */
+    static String computeUndoReplacementFullText(String full, int selStart, int selEnd) {
+        if (full == null) return null;
         if (selStart != selEnd) {
             Log.d(TAG, "scratch: skip — non-collapsed selection " + selStart + "-" + selEnd);
-            return false;
+            return null;
         }
         if (selStart < 0 || selStart > full.length()) {
             Log.w(TAG, "scratch: skip — bad selStart=" + selStart + " for len=" + full.length());
-            return false;
+            return null;
         }
         String before = full.substring(0, selStart);
         String after = full.substring(selStart);
@@ -117,17 +195,16 @@ public final class ImeTextEditHelper {
         if (newBefore.equals(before)) {
             Log.d(TAG, "scratch: no change after withoutLastSentence (beforeLen=" + before.length()
                     + " may lack . ! ? 。！？ or empty)");
-            return false;
+            return null;
         }
-        ic.beginBatchEdit();
-        try {
-            ic.deleteSurroundingText(selStart, full.length() - selStart);
-            ic.commitText(newBefore + after, 1);
-        } finally {
-            ic.endBatchEdit();
-        }
-        Log.d(TAG, "scratch: applied — beforeLen " + before.length() + " -> " + newBefore.length());
-        return true;
+        return newBefore + after;
+    }
+
+    private static int computeUndoNewCursor(String full, int selStart, int selEnd, String newFull) {
+        if (selStart != selEnd) return newFull.length();
+        String before = full.substring(0, selStart);
+        String newBefore = withoutLastSentence(before);
+        return newBefore.length();
     }
 
     private static boolean isSentenceEnd(char c) {
