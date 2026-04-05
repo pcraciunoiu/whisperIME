@@ -67,6 +67,8 @@ public class WhisperInputMethodService extends InputMethodService {
     private LinearLayout layoutButtons;
     private MoonshineHoldRecorder imeMoonshineRecorder = null;
     private ParakeetStreamingRecorder imeParakeetRecorder = null;
+    /** Live "scratch that" already removed a sentence; skip duplicate apply on finger-up. */
+    private boolean imeScratchVoiceCommandConsumed = false;
 
     private boolean useMoonshineImeNow() {
         return AsrEnginePreferences.MOONSHINE.equals(AsrEnginePreferences.mainEngine(this))
@@ -248,25 +250,19 @@ public class WhisperInputMethodService extends InputMethodService {
             public boolean onTouch(View v, MotionEvent event) {
                 if (event.getAction() == MotionEvent.ACTION_DOWN) {
                     InputConnection icDel = getCurrentInputConnection();
-                    if (icDel != null) {
-                        icDel.sendKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DEL));
-                    }
+                    ImeTextEditHelper.deleteLastWord(icDel);
                     // Post the initial delay of 500ms
                     initialDeleteRunnable = new Runnable() {
                         @Override
                         public void run() {
                             InputConnection ic0 = getCurrentInputConnection();
-                            if (ic0 != null) {
-                                ic0.sendKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DEL));
-                            }
+                            ImeTextEditHelper.deleteLastWord(ic0);
                             // Start repeating every 100ms
                             repeatDeleteRunnable = new Runnable() {
                                 @Override
                                 public void run() {
                                     InputConnection ic1 = getCurrentInputConnection();
-                                    if (ic1 != null) {
-                                        ic1.sendKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DEL));
-                                    }
+                                    ImeTextEditHelper.deleteLastWord(ic1);
                                     handler.postDelayed(this, 100);
                                 }
                             };
@@ -293,15 +289,13 @@ public class WhisperInputMethodService extends InputMethodService {
             boolean liveImePartials = sp.getBoolean("liveTranscribePartials", false);
             if (useMoonshineImeNow()) {
                 if (event.getAction() == MotionEvent.ACTION_DOWN) {
+                    imeScratchVoiceCommandConsumed = false;
                     handler.post(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background_pressed));
                     if (checkRecordPermission()) {
                         HapticFeedback.vibrate(this);
                         imeMoonshineRecorder = new MoonshineHoldRecorder(this, handler,
-                                partial -> handler.post(() -> {
-                                    if (!liveImePartials) return;
-                                    InputConnection ic = getCurrentInputConnection();
-                                    if (ic != null) ic.setComposingText(partial, 1);
-                                }), liveImePartials);
+                                partial -> handler.post(() -> applyLiveImePartial(partial, liveImePartials)),
+                                liveImePartials);
                         if (!imeMoonshineRecorder.start()) {
                             imeMoonshineRecorder = null;
                         }
@@ -334,15 +328,12 @@ public class WhisperInputMethodService extends InputMethodService {
             }
             if (useParakeetImeNow()) {
                 if (event.getAction() == MotionEvent.ACTION_DOWN) {
+                    imeScratchVoiceCommandConsumed = false;
                     handler.post(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background_pressed));
                     if (checkRecordPermission()) {
                         HapticFeedback.vibrate(this);
                         imeParakeetRecorder = new ParakeetStreamingRecorder(this, sdcardDataFolder, handler,
-                                partial -> handler.post(() -> {
-                                    if (!liveImePartials) return;
-                                    InputConnection ic = getCurrentInputConnection();
-                                    if (ic != null) ic.setComposingText(partial, 1);
-                                }));
+                                partial -> handler.post(() -> applyLiveImePartial(partial, liveImePartials)));
                         if (!imeParakeetRecorder.start()) {
                             imeParakeetRecorder = null;
                         }
@@ -375,6 +366,7 @@ public class WhisperInputMethodService extends InputMethodService {
             }
             if (event.getAction() == MotionEvent.ACTION_DOWN) {
                 // Pressed
+                imeScratchVoiceCommandConsumed = false;
                 handler.post(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background_pressed));
                 if (checkRecordPermission()){
                     if (mWhisper == null && selectedTfliteFile != null && selectedTfliteFile.isFile()) {
@@ -493,7 +485,12 @@ public class WhisperInputMethodService extends InputMethodService {
                     InputConnection ic = getCurrentInputConnection();
                     boolean commitSuccess = false;
                     if (ic != null && result.trim().length() > 0) {
-                        commitSuccess = ic.commitText(result.trim() + " ", 1);
+                        if (ImeTextEditHelper.matchesScratchThatCommand(result)) {
+                            Log.d(TAG, "scratch: Whisper result command=\"" + summarizeForLog(result) + "\"");
+                            commitSuccess = ImeTextEditHelper.applyScratchThat(ic);
+                        } else {
+                            commitSuccess = ic.commitText(result.trim() + " ", 1);
+                        }
                     }
                     if (modeAuto && commitSuccess) {
                         handler.postDelayed(() -> switchToPreviousInputMethod(), 100);
@@ -537,9 +534,44 @@ public class WhisperInputMethodService extends InputMethodService {
      * After hold-to-talk, insert final text. With live partials we only use {@link InputConnection#commitText}
      * so the composing span is replaced once (finishComposingText + commitText duplicated the phrase).
      */
+    private void applyLiveImePartial(String partial, boolean liveImePartials) {
+        if (!liveImePartials) return;
+        InputConnection ic = getCurrentInputConnection();
+        if (ic == null) {
+            Log.d(TAG, "scratch/live partial: InputConnection null (field may have lost focus)");
+            return;
+        }
+        if (ImeTextEditHelper.matchesScratchThatCommand(partial)) {
+            Log.d(TAG, "scratch: live composing command text=\"" + summarizeForLog(partial) + "\"");
+            ic.setComposingText("", 1);
+            ImeTextEditHelper.applyScratchThat(ic);
+            imeScratchVoiceCommandConsumed = true;
+            return;
+        }
+        ic.setComposingText(partial, 1);
+    }
+
+    private static String summarizeForLog(String s) {
+        if (s == null) return "";
+        String t = s.trim();
+        return t.length() > 80 ? t.substring(0, 80) + "…" : t;
+    }
+
     private void commitHoldTranscription(InputConnection ic, String fin, boolean hadLivePartials) {
         if (ic == null) return;
         String t = fin.trim();
+        if (ImeTextEditHelper.matchesScratchThatCommand(fin)) {
+            Log.d(TAG, "scratch: hold release command=\"" + summarizeForLog(fin) + "\" hadLivePartials="
+                    + hadLivePartials + " alreadyConsumedPartial=" + imeScratchVoiceCommandConsumed);
+            if (hadLivePartials) {
+                ic.setComposingText("", 1);
+            }
+            if (!imeScratchVoiceCommandConsumed) {
+                ImeTextEditHelper.applyScratchThat(ic);
+            }
+            imeScratchVoiceCommandConsumed = false;
+            return;
+        }
         if (t.length() > 0) {
             ic.commitText(t + " ", 1);
         } else if (hadLivePartials) {

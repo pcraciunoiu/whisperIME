@@ -10,6 +10,7 @@ import android.media.MediaRecorder
 import android.os.Handler
 import android.util.Log
 import androidx.core.app.ActivityCompat
+import com.whispertflite.BuildConfig
 import java.io.File
 import java.util.function.Consumer
 import java.util.concurrent.atomic.AtomicBoolean
@@ -63,15 +64,17 @@ class ParakeetStreamingRecorder(
         }
         engine?.close()
         engine = null
-        Log.i(
-            TAG,
-            "stop() mainThread finalLen=${last.length} fullChunks=$audioChunksFed preview=\"${last.take(80)}\"",
-        )
+        if (BuildConfig.DEBUG) {
+            Log.d(
+                TAG,
+                "stop() finalLen=${last.length} fullChunks=$audioChunksFed preview=\"${last.take(80)}\"",
+            )
+        }
         return last
     }
 
     private fun recordLoop() {
-        Log.i(TAG, "worker: ParakeetStream thread started")
+        if (BuildConfig.DEBUG) Log.d(TAG, "worker: ParakeetStream thread started")
         val t0 = android.os.SystemClock.elapsedRealtime()
         val eng = try {
             ParakeetStreamingEngine(context, modelsDir).also { it.resetSession() }
@@ -80,7 +83,9 @@ class ParakeetStreamingRecorder(
             running.set(false)
             return
         }
-        Log.i(TAG, "worker: engine ready in ${android.os.SystemClock.elapsedRealtime() - t0}ms")
+        if (BuildConfig.DEBUG) {
+            Log.d(TAG, "worker: engine ready in ${android.os.SystemClock.elapsedRealtime() - t0}ms")
+        }
         if (!running.get()) {
             Log.w(TAG, "worker: stop before mic — finger up during model load? (no audio processed)")
             eng.close()
@@ -121,14 +126,9 @@ class ParakeetStreamingRecorder(
         }
         engine = eng
         record.startRecording()
-        Log.i(
-            TAG,
-            "worker: mic on — first inference after ${ParakeetConstants.CHUNK_PCM_SAMPLES} samples (~${ParakeetConstants.CHUNK_PCM_SAMPLES * 1000 / sampleRate}ms audio)",
-        )
         val readBuf = ShortArray(2048)
         val chunk = ShortArray(ParakeetConstants.CHUNK_PCM_SAMPLES)
         var filled = 0
-        var loggedFirstRead = false
         /** When the model emits a fresh segment after silence, merge with prior text for this hold. */
         var streamedStitch = ""
         try {
@@ -139,10 +139,6 @@ class ParakeetStreamingRecorder(
                     break
                 }
                 if (n == 0) continue
-                if (!loggedFirstRead) {
-                    loggedFirstRead = true
-                    Log.i(TAG, "worker: first samples read n=$n")
-                }
                 var i = 0
                 while (i < n && running.get()) {
                     val need = ParakeetConstants.CHUNK_PCM_SAMPLES - filled
@@ -159,10 +155,6 @@ class ParakeetStreamingRecorder(
                             ""
                         }
                         streamedStitch = stitchStreamingPartials(streamedStitch, text)
-                        Log.i(
-                            TAG,
-                            "worker: fullChunk#$audioChunksFed partialLen=${text.length} \"${text.take(48)}\"",
-                        )
                         mainHandler.post { onPartial.accept(streamedStitch) }
                         filled = 0
                     }
@@ -174,10 +166,6 @@ class ParakeetStreamingRecorder(
                 try {
                     val text = eng.processPcm16Chunk(chunk)
                     streamedStitch = stitchStreamingPartials(streamedStitch, text)
-                    Log.i(
-                        TAG,
-                        "worker: padded partial flush filled=$filled/${ParakeetConstants.CHUNK_PCM_SAMPLES} partialLen=${text.length}",
-                    )
                     mainHandler.post { onPartial.accept(streamedStitch) }
                 } catch (e: Exception) {
                     Log.e(TAG, "partial flush processPcm16Chunk failed", e)

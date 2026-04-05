@@ -6,6 +6,8 @@ import static java.lang.Math.sin;
 
 import android.util.Log;
 
+import com.whispertflite.BuildConfig;
+
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -75,21 +77,21 @@ public class WhisperUtil {
         byte[] bytes = Files.readAllBytes(Paths.get(vocabPath));
         ByteBuffer vocabBuf = ByteBuffer.wrap(bytes);
         vocabBuf.order(ByteOrder.nativeOrder());
-        Log.d(TAG, "Vocab file size: " + vocabBuf.limit());
+        if (BuildConfig.DEBUG) Log.d(TAG, "Vocab file size: " + vocabBuf.limit());
 
         // @magic:USEN
         int magic = vocabBuf.getInt();
         if (magic == 0x5553454e) {
-            Log.d(TAG, "Magic number: " + magic);
+            if (BuildConfig.DEBUG) Log.d(TAG, "Magic number: " + magic);
         } else {
-            Log.d(TAG, "Invalid vocab file (bad magic: " + magic + "), " + vocabPath);
+            Log.w(TAG, "Invalid vocab file (bad magic: " + magic + "), " + vocabPath);
             return false;
         }
 
         // Load mel filters
         filters.nMel = vocabBuf.getInt();
         filters.nFft = vocabBuf.getInt();
-        Log.d(TAG, "n_mel:" + filters.nMel + ", n_fft:" + filters.nFft);
+        if (BuildConfig.DEBUG) Log.d(TAG, "n_mel:" + filters.nMel + ", n_fft:" + filters.nFft);
 
         byte[] filterData = new byte[filters.nMel * filters.nFft * Float.BYTES];
         vocabBuf.get(filterData, 0, filterData.length);
@@ -103,7 +105,7 @@ public class WhisperUtil {
 
         // Load vocabulary
         int nVocab = vocabBuf.getInt();
-        Log.d(TAG, "nVocab: " + nVocab);
+        if (BuildConfig.DEBUG) Log.d(TAG, "nVocab: " + nVocab);
         for (int i = 0; i < nVocab; i++) {
             int len = vocabBuf.getInt();
             byte[] wordBytes = new byte[len];
@@ -177,7 +179,7 @@ public class WhisperUtil {
             final int ith = iw;  // Capture iw in a final variable for use in the lambda
             Thread thread = new Thread(() -> {
                 // Inside the thread, ith will have the same value as iw (first value is 0)
-                Log.d(TAG, "Thread " + ith + " started.");
+                if (BuildConfig.DEBUG) Log.d(TAG, "Thread " + ith + " started.");
 
                 float[] fftIn = new float[fftSize];
                 Arrays.fill(fftIn, 0.0f);

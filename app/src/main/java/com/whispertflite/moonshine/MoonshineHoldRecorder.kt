@@ -13,6 +13,7 @@ import android.media.MediaRecorder
 import android.os.Handler
 import android.util.Log
 import androidx.core.app.ActivityCompat
+import com.whispertflite.BuildConfig
 import java.util.function.Consumer
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.min
@@ -67,7 +68,9 @@ class MoonshineHoldRecorder(
         worker = null
         val last = lastTranscript
         transcriber = null
-        Log.i(TAG, "stop() finalLen=${last.length} pseudoChunks=$pseudoChunks preview=\"${last.take(80)}\"")
+        if (BuildConfig.DEBUG) {
+            Log.d(TAG, "stop() finalLen=${last.length} pseudoChunks=$pseudoChunks preview=\"${last.take(80)}\"")
+        }
         return last
     }
 
@@ -166,7 +169,7 @@ class MoonshineHoldRecorder(
     }
 
     private fun recordLoop() {
-        Log.i(TAG, "worker: thread started")
+        if (BuildConfig.DEBUG) Log.d(TAG, "worker: thread started")
         val loadThread =
             Thread(
                 {
@@ -178,7 +181,9 @@ class MoonshineHoldRecorder(
                             JNI.MOONSHINE_MODEL_ARCH_BASE,
                         )
                         transcriber = tr
-                        Log.i(TAG, "worker: Moonshine Base ready in ${android.os.SystemClock.elapsedRealtime() - t0}ms")
+                        if (BuildConfig.DEBUG) {
+                            Log.d(TAG, "worker: Moonshine Base ready in ${android.os.SystemClock.elapsedRealtime() - t0}ms")
+                        }
                     } catch (e: Exception) {
                         Log.e(TAG, "Moonshine load failed", e)
                     }
@@ -230,7 +235,9 @@ class MoonshineHoldRecorder(
         }
 
         record.startRecording()
-        Log.i(TAG, "worker: mic on — buffering while model loads (max ${MoonshineConstants.MAX_RECORD_SECONDS}s)")
+        if (BuildConfig.DEBUG) {
+            Log.d(TAG, "worker: mic on — buffering (max ${MoonshineConstants.MAX_RECORD_SECONDS}s)")
+        }
         val readBuf = ShortArray(2048)
         val maxSamples = MoonshineConstants.SAMPLE_RATE * MoonshineConstants.MAX_RECORD_SECONDS
         var accum = ShortArray(min(32_000, maxSamples))
@@ -246,7 +253,9 @@ class MoonshineHoldRecorder(
                 if (n == 0) continue
                 if (!loggedFirst) {
                     loggedFirst = true
-                    Log.i(TAG, "worker: first samples read n=$n (modelReady=${transcriber != null})")
+                    if (BuildConfig.DEBUG) {
+                        Log.d(TAG, "worker: first samples read n=$n (modelReady=${transcriber != null})")
+                    }
                 }
 
                 val trLocal = transcriber
@@ -312,7 +321,9 @@ class MoonshineHoldRecorder(
                         val transcript = tr.transcribeWithoutStreaming(floats, sampleRate)
                         val text = transcript?.text()?.trim() ?: ""
                         lastTranscript = text
-                        Log.i(TAG, "worker: transcribe samples=$len textLen=${text.length} \"${text.take(48)}\"")
+                        if (BuildConfig.DEBUG) {
+                            Log.d(TAG, "worker: transcribe samples=$len textLen=${text.length} \"${text.take(48)}\"")
+                        }
                         if (text.isNotEmpty()) {
                             mainHandler.post { onPartial.accept(text) }
                         }

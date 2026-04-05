@@ -3,6 +3,7 @@ package com.whispertflite.engine;
 import android.content.Context;
 import android.util.Log;
 
+import com.whispertflite.BuildConfig;
 import com.whispertflite.asr.RecordBuffer;
 import com.whispertflite.asr.Whisper;
 import com.whispertflite.asr.WhisperResult;
@@ -48,16 +49,16 @@ public class WhisperEngineJava implements WhisperEngine {
     public void initialize(String modelPath, String vocabPath, boolean multilingual) throws IOException {
         // Load model
         loadModel(modelPath);
-        Log.d(TAG, "Model is loaded..." + modelPath);
+        if (BuildConfig.DEBUG) Log.d(TAG, "Model is loaded..." + modelPath);
 
         // Load filters and vocab
         boolean ret = mWhisperUtil.loadFiltersAndVocab(multilingual, vocabPath);
         if (ret) {
             mIsInitialized = true;
-            Log.d(TAG, "Filters and Vocab are loaded..." + vocabPath);
+            if (BuildConfig.DEBUG) Log.d(TAG, "Filters and Vocab are loaded..." + vocabPath);
         } else {
             mIsInitialized = false;
-            Log.d(TAG, "Failed to load Filters and Vocab...");
+            if (BuildConfig.DEBUG) Log.d(TAG, "Failed to load Filters and Vocab...");
         }
 
     }
@@ -75,13 +76,13 @@ public class WhisperEngineJava implements WhisperEngine {
     @Override
     public WhisperResult processRecordBuffer(Whisper.Action mAction, int mLangToken) {
         // Calculate Mel spectrogram
-        Log.d(TAG, "Calculating Mel spectrogram...");
+        if (BuildConfig.DEBUG) Log.d(TAG, "Calculating Mel spectrogram...");
         float[] melSpectrogram = getMelSpectrogram();
-        Log.d(TAG, "Mel spectrogram is calculated...!");
+        if (BuildConfig.DEBUG) Log.d(TAG, "Mel spectrogram is calculated...!");
 
         // Perform inference
         WhisperResult whisperResult = runInference(melSpectrogram, mAction, mLangToken);
-        Log.d(TAG, "Inference is executed...!");
+        if (BuildConfig.DEBUG) Log.d(TAG, "Inference is executed...!");
 
         return whisperResult;
     }
@@ -118,7 +119,7 @@ public class WhisperEngineJava implements WhisperEngine {
     }
 
     private WhisperResult runInference(float[] inputData, Whisper.Action mAction, int mLangToken) {
-        Log.d("Whisper","Signatures "+ Arrays.toString(mInterpreter.getSignatureKeys()));
+        if (BuildConfig.DEBUG) Log.d("Whisper", "Signatures " + Arrays.toString(mInterpreter.getSignatureKeys()));
 
         // Create input tensor
         Tensor inputTensor = mInterpreter.getInputTensor(0);
@@ -147,7 +148,7 @@ public class WhisperEngineJava implements WhisperEngine {
         String[] inputs = mInterpreter.getSignatureInputs(signature_key);
         inputsMap.put(inputs[0], inputBuffer);
         if (signature_key.equals("serving_transcribe_lang")) {
-            Log.d(TAG,"Serving_transcribe_lang " + mLangToken);
+            if (BuildConfig.DEBUG) Log.d(TAG, "Serving_transcribe_lang " + mLangToken);
             IntBuffer langTokenBuffer = IntBuffer.allocate(1);
             langTokenBuffer.put(mLangToken);
             langTokenBuffer.rewind();
@@ -170,7 +171,7 @@ public class WhisperEngineJava implements WhisperEngine {
         String language = "";
         Whisper.Action task = null;
         int outputLen = outputBuffer.getIntArray().length;
-        Log.d(TAG, "output_len: " + outputLen);
+        if (BuildConfig.DEBUG) Log.d(TAG, "output_len: " + outputLen);
         List<byte[]> resultArray = new ArrayList<>();
         for (int i = 0; i < outputLen; i++) {
             int token = outputBuffer.getBuffer().getInt();
@@ -183,21 +184,23 @@ public class WhisperEngineJava implements WhisperEngine {
                 resultArray.add(wordBytes);
             } else {
                 if (token == mWhisperUtil.getTokenTranscribe()){
-                    Log.d(TAG, "It is Transcription...");
+                    if (BuildConfig.DEBUG) Log.d(TAG, "It is Transcription...");
                     task = Whisper.Action.TRANSCRIBE;
                 }
 
                 if (token == mWhisperUtil.getTokenTranslate()){
-                    Log.d(TAG, "It is Translation...");
+                    if (BuildConfig.DEBUG) Log.d(TAG, "It is Translation...");
                     task = Whisper.Action.TRANSLATE;
                 }
 
                 if (token >= 50259 && token <= 50357){
                     language = InputLang.getLanguageCodeById(inputLangList, token);
-                    Log.d(TAG, "Detected language code: "+ language);
+                    if (BuildConfig.DEBUG) Log.d(TAG, "Detected language code: "+ language);
                 }
                 byte[] wordBytes = mWhisperUtil.getWordFromToken(token);
-                Log.d(TAG, "Skipping token: " + token + ", word: " + new String(wordBytes, StandardCharsets.UTF_8));
+                if (BuildConfig.DEBUG) {
+                    Log.d(TAG, "Skipping token: " + token + ", word: " + new String(wordBytes, StandardCharsets.UTF_8));
+                }
             }
         }
 
