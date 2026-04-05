@@ -33,6 +33,10 @@ class MoonshineHoldRecorder(
     private val running = AtomicBoolean(false)
     private var pseudoChunks = 0
 
+    /** Finished transcript lines in the current live hold (Moonshine reports each line separately). */
+    private val liveLineLock = Any()
+    private val liveCompletedLines = StringBuilder()
+
     fun start(): Boolean {
         if (!MoonshineModelFiles.isDeviceSupported(context)) return false
         if (!MoonshineModelFiles.allModelFilesPresent(context)) return false
@@ -43,6 +47,8 @@ class MoonshineHoldRecorder(
         }
         stop(join = true)
         pseudoChunks = 0
+        synchronized(liveLineLock) { liveCompletedLines.clear() }
+        lastTranscript = ""
         running.set(true)
         worker = Thread({ recordLoop() }, "MoonshineStream").also { it.start() }
         return true
@@ -68,6 +74,23 @@ class MoonshineHoldRecorder(
     @Volatile
     private var lastTranscript: String = ""
 
+    /** Emits [liveCompletedLines] + current in-progress line so pauses do not drop earlier sentences. */
+    private fun emitLiveCumulative(currentLineText: String) {
+        val full =
+            synchronized(liveLineLock) {
+                buildString {
+                    append(liveCompletedLines.toString())
+                    val cur = currentLineText.trim()
+                    if (isNotEmpty() && cur.isNotEmpty()) append(' ')
+                    append(cur)
+                }
+            }
+        if (full.isNotEmpty()) {
+            lastTranscript = full
+            mainHandler.post { onPartial.accept(full) }
+        }
+    }
+
     private fun attachLiveListener(tr: Transcriber) {
         tr.removeAllListeners()
         tr.addListener { event ->
@@ -75,22 +98,25 @@ class MoonshineHoldRecorder(
                 object : TranscriptEvent.Visitor {
                     override fun onLineStarted(e: TranscriptEvent.LineStarted) {}
 
-                    override fun onLineUpdated(e: TranscriptEvent.LineUpdated) {}
+                    override fun onLineUpdated(e: TranscriptEvent.LineUpdated) {
+                        val t = e.line.text?.trim().orEmpty()
+                        emitLiveCumulative(t)
+                    }
 
                     override fun onLineTextChanged(e: TranscriptEvent.LineTextChanged) {
                         val t = e.line.text?.trim().orEmpty()
-                        if (t.isNotEmpty()) {
-                            lastTranscript = t
-                            mainHandler.post { onPartial.accept(t) }
-                        }
+                        emitLiveCumulative(t)
                     }
 
                     override fun onLineCompleted(e: TranscriptEvent.LineCompleted) {
                         val t = e.line.text?.trim().orEmpty()
-                        if (t.isNotEmpty()) {
-                            lastTranscript = t
-                            mainHandler.post { onPartial.accept(t) }
+                        synchronized(liveLineLock) {
+                            if (t.isNotEmpty()) {
+                                if (liveCompletedLines.isNotEmpty()) liveCompletedLines.append(' ')
+                                liveCompletedLines.append(t)
+                            }
                         }
+                        emitLiveCumulative("")
                     }
 
                     override fun onError(e: TranscriptEvent.Error) {

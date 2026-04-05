@@ -129,6 +129,8 @@ class ParakeetStreamingRecorder(
         val chunk = ShortArray(ParakeetConstants.CHUNK_PCM_SAMPLES)
         var filled = 0
         var loggedFirstRead = false
+        /** When the model emits a fresh segment after silence, merge with prior text for this hold. */
+        var streamedStitch = ""
         try {
             while (running.get()) {
                 val n = record.read(readBuf, 0, readBuf.size)
@@ -156,11 +158,12 @@ class ParakeetStreamingRecorder(
                             Log.e(TAG, "processPcm16Chunk failed", e)
                             ""
                         }
+                        streamedStitch = stitchStreamingPartials(streamedStitch, text)
                         Log.i(
                             TAG,
                             "worker: fullChunk#$audioChunksFed partialLen=${text.length} \"${text.take(48)}\"",
                         )
-                        mainHandler.post { onPartial.accept(text) }
+                        mainHandler.post { onPartial.accept(streamedStitch) }
                         filled = 0
                     }
                 }
@@ -170,11 +173,12 @@ class ParakeetStreamingRecorder(
                 chunk.fill(0.toShort(), filled, chunk.size)
                 try {
                     val text = eng.processPcm16Chunk(chunk)
+                    streamedStitch = stitchStreamingPartials(streamedStitch, text)
                     Log.i(
                         TAG,
                         "worker: padded partial flush filled=$filled/${ParakeetConstants.CHUNK_PCM_SAMPLES} partialLen=${text.length}",
                     )
-                    mainHandler.post { onPartial.accept(text) }
+                    mainHandler.post { onPartial.accept(streamedStitch) }
                 } catch (e: Exception) {
                     Log.e(TAG, "partial flush processPcm16Chunk failed", e)
                 }
@@ -191,6 +195,17 @@ class ParakeetStreamingRecorder(
 
     companion object {
         private const val TAG = "ParakeetASR"
+
+        /** Cumulative streaming text; if a chunk starts a disjoint hypothesis after a pause, append it. */
+        private fun stitchStreamingPartials(prev: String, incoming: String): String {
+            val inc = incoming.trim()
+            if (inc.isEmpty()) return prev
+            val p = prev.trim()
+            if (p.isEmpty()) return inc
+            if (inc.startsWith(p)) return inc
+            if (p.startsWith(inc)) return inc
+            return "$p $inc".trim()
+        }
     }
 
     /** Last partial text from engine (call before [stop] closes engine). */
