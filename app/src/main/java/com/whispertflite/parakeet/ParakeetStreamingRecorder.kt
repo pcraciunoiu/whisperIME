@@ -92,6 +92,14 @@ class ParakeetStreamingRecorder(
             return
         }
 
+        if (ActivityCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            running.set(false)
+            eng.close()
+            return
+        }
+
         val sampleRate = ParakeetConstants.SAMPLE_RATE
         val channelConfig = AudioFormat.CHANNEL_IN_MONO
         val audioFormat = AudioFormat.ENCODING_PCM_16BIT

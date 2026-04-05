@@ -135,6 +135,7 @@ class DownloadActivity : AppCompatActivity() {
         finish()
     }
 
+    @Suppress("UNUSED_PARAMETER")
     fun download(view: View) {
         val engine = selectedEngine()
         binding?.downloadSize?.visibility = View.VISIBLE
@@ -181,12 +182,14 @@ class DownloadActivity : AppCompatActivity() {
         }
     }
 
+    @Suppress("UNUSED_PARAMETER")
     fun startMain(view: View) {
         AsrEnginePreferences.setMainEngine(this, selectedEngine())
         startActivity(Intent(this, MainActivity::class.java))
         finish()
     }
 
+    @Suppress("UNUSED_PARAMETER")
     fun updateModels(view: View) {
         binding?.downloadSize?.visibility = View.VISIBLE
         binding?.downloadProgress?.visibility = View.VISIBLE
