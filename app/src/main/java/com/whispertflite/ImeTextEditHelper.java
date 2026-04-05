@@ -7,6 +7,7 @@ import android.view.inputmethod.ExtractedText;
 import android.view.inputmethod.ExtractedTextRequest;
 import android.view.inputmethod.InputConnection;
 
+import java.util.Locale;
 import java.util.Set;
 
 /**
@@ -15,6 +16,28 @@ import java.util.Set;
  */
 public final class ImeTextEditHelper {
     private static final String TAG = "WhisperIME";
+
+    public enum VoiceCommandKind {
+        NONE,
+        UNDO,
+        NEWLINE,
+    }
+
+    /** Result of {@link #findTrailingVoiceCommand(String, Set, Set)}. */
+    public static final class VoiceCommandTail {
+        public final VoiceCommandKind kind;
+        /** Text before the trailing command phrase (original casing), trimmed. */
+        public final String prefix;
+
+        public VoiceCommandTail(VoiceCommandKind kind, String prefix) {
+            this.kind = kind;
+            this.prefix = prefix != null ? prefix : "";
+        }
+
+        public boolean hasCommand() {
+            return kind != VoiceCommandKind.NONE;
+        }
+    }
 
     private ImeTextEditHelper() {}
 
@@ -76,6 +99,92 @@ public final class ImeTextEditHelper {
     }
 
     /**
+     * Detects a configured undo or newline phrase at the end of the transcript (after the same
+     * normalization as {@link #normalizeVoiceCommandPhrase}). Handles multi-sentence live text
+     * like {@code First part. New line}.
+     *
+     * <p>If both an undo and newline phrase could match, the longer phrase wins; on a length tie,
+     * undo wins.
+     */
+    public static VoiceCommandTail findTrailingVoiceCommand(
+            String transcript,
+            Set<String> normalizedUndoPhrases,
+            Set<String> normalizedNewlinePhrases) {
+        if (transcript == null) {
+            return new VoiceCommandTail(VoiceCommandKind.NONE, "");
+        }
+        String t = transcript.trim();
+        if (t.isEmpty()) {
+            return new VoiceCommandTail(VoiceCommandKind.NONE, "");
+        }
+        String lower = t.toLowerCase(Locale.ROOT);
+        String s = normalizeVoiceCommandPhrase(lower);
+        if (s.isEmpty()) {
+            return new VoiceCommandTail(VoiceCommandKind.NONE, "");
+        }
+
+        int bestPhraseLen = -1;
+        VoiceCommandKind bestKind = VoiceCommandKind.NONE;
+        int bestPhraseStart = 0;
+
+        if (normalizedUndoPhrases != null) {
+            for (String phrase : normalizedUndoPhrases) {
+                Integer start = phraseEndIndexInNormalized(s, phrase);
+                if (start != null && voiceCommandMatchBeats(phrase.length(), VoiceCommandKind.UNDO, bestPhraseLen, bestKind)) {
+                    bestPhraseLen = phrase.length();
+                    bestKind = VoiceCommandKind.UNDO;
+                    bestPhraseStart = start;
+                }
+            }
+        }
+        if (normalizedNewlinePhrases != null) {
+            for (String phrase : normalizedNewlinePhrases) {
+                Integer start = phraseEndIndexInNormalized(s, phrase);
+                if (start != null && voiceCommandMatchBeats(phrase.length(), VoiceCommandKind.NEWLINE, bestPhraseLen, bestKind)) {
+                    bestPhraseLen = phrase.length();
+                    bestKind = VoiceCommandKind.NEWLINE;
+                    bestPhraseStart = start;
+                }
+            }
+        }
+
+        if (bestKind == VoiceCommandKind.NONE) {
+            return new VoiceCommandTail(VoiceCommandKind.NONE, "");
+        }
+
+        if (bestPhraseStart > t.length()) {
+            return new VoiceCommandTail(VoiceCommandKind.NONE, "");
+        }
+        String prefix = t.substring(0, bestPhraseStart).trim();
+        return new VoiceCommandTail(bestKind, prefix);
+    }
+
+    /** Longer phrase wins; on equal length, {@link VoiceCommandKind#UNDO} beats {@link VoiceCommandKind#NEWLINE}. */
+    private static boolean voiceCommandMatchBeats(
+            int phraseLen, VoiceCommandKind phraseKind, int bestLen, VoiceCommandKind bestKind) {
+        if (phraseLen > bestLen) return true;
+        if (phraseLen < bestLen) return false;
+        return phraseKind == VoiceCommandKind.UNDO && bestKind == VoiceCommandKind.NEWLINE;
+    }
+
+    /**
+     * @return start index of {@code phrase} at the end of {@code normalizedTranscript}, or null.
+     */
+    private static Integer phraseEndIndexInNormalized(String normalizedTranscript, String phrase) {
+        if (phrase == null || phrase.isEmpty()) return null;
+        if (normalizedTranscript.length() < phrase.length()) return null;
+        if (!normalizedTranscript.endsWith(phrase)) return null;
+        int start = normalizedTranscript.length() - phrase.length();
+        if (start > 0) {
+            char before = normalizedTranscript.charAt(start - 1);
+            if (!Character.isWhitespace(before) && !isSentenceEnd(before)) {
+                return null;
+            }
+        }
+        return start;
+    }
+
+    /**
      * Inserts a newline at the cursor (replaces selection if any).
      */
     public static boolean applyNewLine(InputConnection ic) {
@@ -87,6 +196,14 @@ public final class ImeTextEditHelper {
             ic.endBatchEdit();
         }
         return true;
+    }
+
+    /** Commits spoken text that precedes a trailing voice command (adds a trailing space when needed). */
+    public static void commitTranscriptPrefix(InputConnection ic, String prefixTrimmed) {
+        if (ic == null) return;
+        String p = prefixTrimmed.trim();
+        if (p.isEmpty()) return;
+        ic.commitText(p.endsWith(" ") ? p : p + " ", 1);
     }
 
     public static boolean applyNewLineToEditText(EditText et) {

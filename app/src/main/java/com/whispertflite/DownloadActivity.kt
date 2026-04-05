@@ -3,6 +3,8 @@ package com.whispertflite
 import android.content.Intent
 import android.os.Bundle
 import android.view.View
+import android.widget.AdapterView
+import android.widget.ArrayAdapter
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.preference.PreferenceManager
@@ -34,14 +36,27 @@ class DownloadActivity : AppCompatActivity() {
         val wizard = AsrEnginePreferences.setupWizardEngine(this)
             ?: legacyWizardEngine(sp)
         val initial = fromIntent ?: wizard ?: AsrEnginePreferences.WHISPER
-        checkRadioForEngine(initial)
+
+        val engineAdapter = ArrayAdapter.createFromResource(
+            this,
+            R.array.asr_engine_entries,
+            android.R.layout.simple_spinner_item,
+        )
+        engineAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        binding?.spinnerWizardEngine?.adapter = engineAdapter
+        setSpinnerSelectionForEngine(initial)
         AsrEnginePreferences.setSetupWizardEngine(this, initial)
         applyWizardDescription(initial)
 
-        binding?.modelChoiceGroup?.setOnCheckedChangeListener { _, checkedId ->
-            val eng = engineForRadioId(checkedId)
-            AsrEnginePreferences.setSetupWizardEngine(this, eng)
-            applyWizardDescription(eng)
+        binding?.spinnerWizardEngine?.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                val values = resources.getStringArray(R.array.asr_engine_entry_values)
+                val eng = values.getOrElse(position) { AsrEnginePreferences.WHISPER }
+                AsrEnginePreferences.setSetupWizardEngine(this@DownloadActivity, eng)
+                applyWizardDescription(eng)
+            }
+
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
     }
 
@@ -52,24 +67,16 @@ class DownloadActivity : AppCompatActivity() {
         else -> null
     }
 
-    private fun checkRadioForEngine(engine: String) {
-        when (engine) {
-            AsrEnginePreferences.PARAKEET -> binding?.radioParakeet?.isChecked = true
-            AsrEnginePreferences.MOONSHINE -> binding?.radioMoonshine?.isChecked = true
-            else -> binding?.radioWhisper?.isChecked = true
-        }
+    private fun setSpinnerSelectionForEngine(engine: String) {
+        val values = resources.getStringArray(R.array.asr_engine_entry_values)
+        val idx = values.indexOf(engine).takeIf { it >= 0 } ?: 0
+        binding?.spinnerWizardEngine?.setSelection(idx, false)
     }
 
-    private fun engineForRadioId(checkedId: Int): String = when (checkedId) {
-        R.id.radio_parakeet -> AsrEnginePreferences.PARAKEET
-        R.id.radio_moonshine -> AsrEnginePreferences.MOONSHINE
-        else -> AsrEnginePreferences.WHISPER
-    }
-
-    private fun selectedEngine(): String = when {
-        binding?.radioParakeet?.isChecked == true -> AsrEnginePreferences.PARAKEET
-        binding?.radioMoonshine?.isChecked == true -> AsrEnginePreferences.MOONSHINE
-        else -> AsrEnginePreferences.WHISPER
+    private fun selectedEngine(): String {
+        val pos = binding?.spinnerWizardEngine?.selectedItemPosition ?: 0
+        val values = resources.getStringArray(R.array.asr_engine_entry_values)
+        return values.getOrElse(pos) { AsrEnginePreferences.WHISPER }
     }
 
     private fun applyWizardDescription(engine: String) {

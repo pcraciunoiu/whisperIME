@@ -32,6 +32,7 @@ import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.Spinner;
 import android.widget.TextView;
+import android.text.Editable;
 import android.widget.EditText;
 import androidx.activity.OnBackPressedCallback;
 import android.widget.Toast;
@@ -115,6 +116,8 @@ public class MainActivity extends AppCompatActivity {
     private EditText etVoiceNewlinePhrases;
     /** Live partial already applied undo/newline; skip duplicate on finger-up. */
     private boolean mainVoiceCommandConsumed = false;
+    /** Text in {@link #tvResult} before a live Moonshine/Parakeet hold when append mode is on. */
+    private String mainLiveAppendPrefix = null;
 
     @Override
     protected void onDestroy() {
@@ -329,6 +332,7 @@ public class MainActivity extends AppCompatActivity {
                     final String liveAppendPrefix = (moonshineLive && append.isChecked())
                             ? tvResult.getText().toString()
                             : null;
+                    mainLiveAppendPrefix = liveAppendPrefix;
                     if (!append.isChecked()) runOnUiThread(() -> tvResult.setText(""));
                     startTime = System.currentTimeMillis();
                     moonshineMainRecorder = new MoonshineHoldRecorder(mContext, mainHandler,
@@ -378,6 +382,7 @@ public class MainActivity extends AppCompatActivity {
                     final String liveAppendPrefix = (live && append.isChecked())
                             ? tvResult.getText().toString()
                             : null;
+                    mainLiveAppendPrefix = liveAppendPrefix;
                     if (!append.isChecked()) runOnUiThread(() -> tvResult.setText(""));
                     startTime = System.currentTimeMillis();
                     parakeetMainRecorder = new ParakeetStreamingRecorder(mContext, sdcardDataFolder, mainHandler,
@@ -539,68 +544,92 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private void appendTranscriptPrefixToEditText(EditText et, String prefix) {
+        if (et == null) return;
+        String p = prefix.trim();
+        if (p.isEmpty()) return;
+        Editable ed = et.getText();
+        int pos = ed.length();
+        et.setSelection(pos);
+        ed.insert(pos, p.endsWith(" ") ? p : p + " ");
+    }
+
     private boolean applyVoiceCommandToResultIfMatches(String text) {
         if (text == null) return false;
         String t = text.trim();
         if (t.isEmpty()) return false;
         Set<String> undo = VoiceCommandPreferences.normalizedUndoPhrases(sp);
         Set<String> nl = VoiceCommandPreferences.normalizedNewlinePhrases(sp);
-        if (ImeTextEditHelper.matchesUndoCommand(t, undo)) {
+        ImeTextEditHelper.VoiceCommandTail tail =
+                ImeTextEditHelper.findTrailingVoiceCommand(text, undo, nl);
+        if (!tail.hasCommand()) {
+            return false;
+        }
+        if (!tail.prefix.isEmpty()) {
+            appendTranscriptPrefixToEditText(tvResult, tail.prefix);
+        }
+        if (tail.kind == ImeTextEditHelper.VoiceCommandKind.UNDO) {
             return ImeTextEditHelper.applyUndoToEditText(tvResult);
         }
-        if (ImeTextEditHelper.matchesNewLineCommand(t, nl)) {
-            return ImeTextEditHelper.applyNewLineToEditText(tvResult);
-        }
-        return false;
+        return ImeTextEditHelper.applyNewLineToEditText(tvResult);
     }
 
     private boolean handleLivePartialVoiceCommand(String partial, String liveAppendPrefix) {
         if (partial == null) return false;
         Set<String> undo = VoiceCommandPreferences.normalizedUndoPhrases(sp);
         Set<String> nl = VoiceCommandPreferences.normalizedNewlinePhrases(sp);
-        if (ImeTextEditHelper.matchesUndoCommand(partial, undo)) {
-            String base = liveAppendPrefix != null ? liveAppendPrefix : "";
-            tvResult.setText(base);
-            tvResult.setSelection(base.length());
+        ImeTextEditHelper.VoiceCommandTail tail =
+                ImeTextEditHelper.findTrailingVoiceCommand(partial, undo, nl);
+        if (!tail.hasCommand()) {
+            return false;
+        }
+        String base = liveAppendPrefix != null ? liveAppendPrefix : "";
+        String vis = base + tail.prefix;
+        tvResult.setText(vis);
+        tvResult.setSelection(vis.length());
+        if (tail.kind == ImeTextEditHelper.VoiceCommandKind.UNDO) {
             ImeTextEditHelper.applyUndoToEditText(tvResult);
-            mainVoiceCommandConsumed = true;
-            return true;
-        }
-        if (ImeTextEditHelper.matchesNewLineCommand(partial, nl)) {
-            String base = liveAppendPrefix != null ? liveAppendPrefix : "";
-            tvResult.setText(base);
-            tvResult.setSelection(base.length());
+        } else {
             ImeTextEditHelper.applyNewLineToEditText(tvResult);
-            mainVoiceCommandConsumed = true;
-            return true;
         }
-        return false;
+        mainVoiceCommandConsumed = true;
+        return true;
     }
 
     private void finishMoonshineOrParakeetHold(String fin, boolean liveNow, long elapsed, boolean moonshine) {
         Set<String> undo = VoiceCommandPreferences.normalizedUndoPhrases(sp);
         Set<String> nl = VoiceCommandPreferences.normalizedNewlinePhrases(sp);
         if (!liveNow) {
+            mainLiveAppendPrefix = null;
             if (!applyVoiceCommandToResultIfMatches(fin)) {
                 if (append.isChecked()) tvResult.append(fin + " ");
                 else tvResult.setText(fin);
             }
         } else {
-            if (ImeTextEditHelper.matchesUndoCommand(fin, undo)) {
+            ImeTextEditHelper.VoiceCommandTail tail =
+                    ImeTextEditHelper.findTrailingVoiceCommand(fin, undo, nl);
+            if (tail.hasCommand()) {
                 if (!mainVoiceCommandConsumed) {
-                    ImeTextEditHelper.applyUndoToEditText(tvResult);
+                    String base = mainLiveAppendPrefix != null ? mainLiveAppendPrefix : "";
+                    tvResult.setText(base + tail.prefix);
+                    tvResult.setSelection(tvResult.getText().length());
+                    if (tail.kind == ImeTextEditHelper.VoiceCommandKind.UNDO) {
+                        ImeTextEditHelper.applyUndoToEditText(tvResult);
+                    } else {
+                        ImeTextEditHelper.applyNewLineToEditText(tvResult);
+                    }
                 }
-            } else if (ImeTextEditHelper.matchesNewLineCommand(fin, nl)) {
-                if (!mainVoiceCommandConsumed) {
-                    ImeTextEditHelper.applyNewLineToEditText(tvResult);
-                }
+                mainVoiceCommandConsumed = false;
             } else if (append.isChecked() && !fin.trim().isEmpty()) {
                 CharSequence cur = tvResult.getText();
                 if (cur.length() > 0 && cur.charAt(cur.length() - 1) != ' ') {
                     tvResult.append(" ");
                 }
+                mainVoiceCommandConsumed = false;
+            } else {
+                mainVoiceCommandConsumed = false;
             }
-            mainVoiceCommandConsumed = false;
+            mainLiveAppendPrefix = null;
         }
         tvStatus.setText(getString(R.string.processing_done) + elapsed + "\u2009ms\n"
                 + getString(R.string.language) + " " + (moonshine

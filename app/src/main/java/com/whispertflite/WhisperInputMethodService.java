@@ -488,12 +488,17 @@ public class WhisperInputMethodService extends InputMethodService {
                     if (ic != null && result.trim().length() > 0) {
                         Set<String> undo = VoiceCommandPreferences.normalizedUndoPhrases(sp);
                         Set<String> nl = VoiceCommandPreferences.normalizedNewlinePhrases(sp);
-                        if (ImeTextEditHelper.matchesUndoCommand(result, undo)) {
-                            Log.d(TAG, "voice undo: Whisper command=\"" + summarizeForLog(result) + "\"");
-                            commitSuccess = ImeTextEditHelper.applyScratchThat(ic);
-                        } else if (ImeTextEditHelper.matchesNewLineCommand(result, nl)) {
-                            Log.d(TAG, "voice newline: Whisper command=\"" + summarizeForLog(result) + "\"");
-                            commitSuccess = ImeTextEditHelper.applyNewLine(ic);
+                        ImeTextEditHelper.VoiceCommandTail tail =
+                                ImeTextEditHelper.findTrailingVoiceCommand(result, undo, nl);
+                        if (tail.hasCommand()) {
+                            ImeTextEditHelper.commitTranscriptPrefix(ic, tail.prefix);
+                            if (tail.kind == ImeTextEditHelper.VoiceCommandKind.UNDO) {
+                                Log.d(TAG, "voice undo: Whisper tail command=\"" + summarizeForLog(result) + "\"");
+                                commitSuccess = ImeTextEditHelper.applyScratchThat(ic);
+                            } else {
+                                Log.d(TAG, "voice newline: Whisper tail command=\"" + summarizeForLog(result) + "\"");
+                                commitSuccess = ImeTextEditHelper.applyNewLine(ic);
+                            }
                         } else {
                             commitSuccess = ic.commitText(result.trim() + " ", 1);
                         }
@@ -549,17 +554,17 @@ public class WhisperInputMethodService extends InputMethodService {
         }
         Set<String> undo = VoiceCommandPreferences.normalizedUndoPhrases(sp);
         Set<String> nl = VoiceCommandPreferences.normalizedNewlinePhrases(sp);
-        if (ImeTextEditHelper.matchesUndoCommand(partial, undo)) {
-            Log.d(TAG, "voice undo: live composing command=\"" + summarizeForLog(partial) + "\"");
-            ic.setComposingText("", 1);
-            ImeTextEditHelper.applyScratchThat(ic);
-            imeVoiceCommandConsumed = true;
-            return;
-        }
-        if (ImeTextEditHelper.matchesNewLineCommand(partial, nl)) {
-            Log.d(TAG, "voice newline: live composing command=\"" + summarizeForLog(partial) + "\"");
-            ic.setComposingText("", 1);
-            ImeTextEditHelper.applyNewLine(ic);
+        ImeTextEditHelper.VoiceCommandTail tail =
+                ImeTextEditHelper.findTrailingVoiceCommand(partial, undo, nl);
+        if (tail.hasCommand()) {
+            ic.setComposingText(tail.prefix, 1);
+            if (tail.kind == ImeTextEditHelper.VoiceCommandKind.UNDO) {
+                Log.d(TAG, "voice undo: live composing tail=\"" + summarizeForLog(partial) + "\"");
+                ImeTextEditHelper.applyScratchThat(ic);
+            } else {
+                Log.d(TAG, "voice newline: live composing tail=\"" + summarizeForLog(partial) + "\"");
+                ImeTextEditHelper.applyNewLine(ic);
+            }
             imeVoiceCommandConsumed = true;
             return;
         }
@@ -577,26 +582,23 @@ public class WhisperInputMethodService extends InputMethodService {
         String t = fin.trim();
         Set<String> undo = VoiceCommandPreferences.normalizedUndoPhrases(sp);
         Set<String> nl = VoiceCommandPreferences.normalizedNewlinePhrases(sp);
-        if (ImeTextEditHelper.matchesUndoCommand(fin, undo)) {
-            Log.d(TAG, "voice undo: hold release command=\"" + summarizeForLog(fin) + "\" hadLivePartials="
-                    + hadLivePartials + " alreadyConsumedPartial=" + imeVoiceCommandConsumed);
+        ImeTextEditHelper.VoiceCommandTail tail =
+                ImeTextEditHelper.findTrailingVoiceCommand(fin, undo, nl);
+        if (tail.hasCommand()) {
+            Log.d(TAG, "voice command: hold release tail=\"" + summarizeForLog(fin) + "\" kind=" + tail.kind
+                    + " hadLivePartials=" + hadLivePartials + " consumedPartial=" + imeVoiceCommandConsumed);
             if (hadLivePartials) {
                 ic.setComposingText("", 1);
             }
-            if (!imeVoiceCommandConsumed) {
-                ImeTextEditHelper.applyScratchThat(ic);
-            }
-            imeVoiceCommandConsumed = false;
-            return;
-        }
-        if (ImeTextEditHelper.matchesNewLineCommand(fin, nl)) {
-            Log.d(TAG, "voice newline: hold release command=\"" + summarizeForLog(fin) + "\" hadLivePartials="
-                    + hadLivePartials + " alreadyConsumedPartial=" + imeVoiceCommandConsumed);
-            if (hadLivePartials) {
-                ic.setComposingText("", 1);
+            if (!tail.prefix.isEmpty()) {
+                ImeTextEditHelper.commitTranscriptPrefix(ic, tail.prefix);
             }
             if (!imeVoiceCommandConsumed) {
-                ImeTextEditHelper.applyNewLine(ic);
+                if (tail.kind == ImeTextEditHelper.VoiceCommandKind.UNDO) {
+                    ImeTextEditHelper.applyScratchThat(ic);
+                } else {
+                    ImeTextEditHelper.applyNewLine(ic);
+                }
             }
             imeVoiceCommandConsumed = false;
             return;
