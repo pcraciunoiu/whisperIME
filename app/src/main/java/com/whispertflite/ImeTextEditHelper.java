@@ -223,6 +223,20 @@ public final class ImeTextEditHelper {
     }
 
     /**
+     * Inserts a newline at the end of the field (ignores selection). Use for voice-driven newline on
+     * {@link android.app.Activity} text fields where live updates may leave the whole transcript selected.
+     */
+    public static boolean applyNewLineAtEndToEditText(EditText et) {
+        if (et == null) return false;
+        Editable ed = et.getText();
+        if (ed == null) return false;
+        int len = ed.length();
+        ed.replace(len, len, "\n");
+        et.setSelection(len + 1);
+        return true;
+    }
+
+    /**
      * Pops {@link VoiceInputUndoStack} if possible; otherwise removes the last sentence before the cursor.
      */
     public static boolean applyUndoToEditText(EditText et) {

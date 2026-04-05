@@ -339,8 +339,12 @@ public class MainActivity extends AppCompatActivity {
                             partial -> runOnUiThread(() -> {
                                 if (!moonshineLive) return;
                                 if (handleLivePartialVoiceCommand(partial, liveAppendPrefix)) return;
-                                if (liveAppendPrefix != null) tvResult.setText(liveAppendPrefix + partial);
-                                else tvResult.setText(partial);
+                                if (liveAppendPrefix != null) {
+                                    tvResult.setText(joinLivePrefixWithPartial(liveAppendPrefix, partial));
+                                } else {
+                                    tvResult.setText(partial != null ? partial : "");
+                                }
+                                moveCursorToEnd(tvResult);
                             }), moonshineLive);
                     if (!moonshineMainRecorder.start()) {
                         Toast.makeText(this, R.string.moonshine_start_failed, Toast.LENGTH_SHORT).show();
@@ -390,8 +394,12 @@ public class MainActivity extends AppCompatActivity {
                                 if (live) {
                                     runOnUiThread(() -> {
                                         if (handleLivePartialVoiceCommand(partial, liveAppendPrefix)) return;
-                                        if (liveAppendPrefix != null) tvResult.setText(liveAppendPrefix + partial);
-                                        else tvResult.setText(partial);
+                                        if (liveAppendPrefix != null) {
+                                            tvResult.setText(joinLivePrefixWithPartial(liveAppendPrefix, partial));
+                                        } else {
+                                            tvResult.setText(partial != null ? partial : "");
+                                        }
+                                        moveCursorToEnd(tvResult);
                                     });
                                 }
                             });
@@ -552,6 +560,48 @@ public class MainActivity extends AppCompatActivity {
         int pos = ed.length();
         et.setSelection(pos);
         ed.insert(pos, p.endsWith(" ") ? p : p + " ");
+        moveCursorToEnd(et);
+    }
+
+    /** Collapses selection and places the caret after the last character (avoids voice newline replacing a selection). */
+    private static void moveCursorToEnd(EditText et) {
+        if (et == null) return;
+        Editable ed = et.getText();
+        if (ed == null) return;
+        et.setSelection(ed.length());
+    }
+
+    /**
+     * Joins text that was already in the field with a live partial; adds a space when both sides are
+     * non-empty and neither already provides separating whitespace (matches IME-style spacing between sentences).
+     */
+    private static String joinLivePrefixWithPartial(String prefix, String partial) {
+        if (prefix == null || prefix.isEmpty()) {
+            return partial != null ? partial : "";
+        }
+        if (partial == null || partial.isEmpty()) {
+            return prefix;
+        }
+        char plast = prefix.charAt(prefix.length() - 1);
+        char pfirst = partial.charAt(0);
+        if (Character.isWhitespace(plast) || Character.isWhitespace(pfirst)) {
+            return prefix + partial;
+        }
+        return prefix + " " + partial;
+    }
+
+    /** Append mode: gap before chunk if needed, then append; caret at end. */
+    private void appendTranscriptChunkWithGap(String chunk) {
+        if (chunk == null || chunk.isEmpty()) return;
+        Editable ed = tvResult.getText();
+        int len = ed.length();
+        if (len > 0
+                && !Character.isWhitespace(ed.charAt(len - 1))
+                && !Character.isWhitespace(chunk.charAt(0))) {
+            ed.append(' ');
+        }
+        ed.append(chunk);
+        moveCursorToEnd(tvResult);
     }
 
     private boolean applyVoiceCommandToResultIfMatches(String text) {
@@ -572,7 +622,7 @@ public class MainActivity extends AppCompatActivity {
         if (!tail.prefix.isEmpty()) {
             appendTranscriptPrefixToEditText(tvResult, tail.prefix);
         }
-        return ImeTextEditHelper.applyNewLineToEditText(tvResult);
+        return ImeTextEditHelper.applyNewLineAtEndToEditText(tvResult);
     }
 
     private boolean handleLivePartialVoiceCommand(String partial, String liveAppendPrefix) {
@@ -591,12 +641,13 @@ public class MainActivity extends AppCompatActivity {
             if (!tail.prefix.isEmpty()) {
                 appendTranscriptPrefixToEditText(tvResult, tail.prefix);
             }
+            moveCursorToEnd(tvResult);
         } else {
             String base = liveAppendPrefix != null ? liveAppendPrefix : "";
             VoiceInputUndoStack.pushFromEditText(tvResult);
-            tvResult.setText(base + tail.prefix);
-            tvResult.setSelection(tvResult.getText().length());
-            ImeTextEditHelper.applyNewLineToEditText(tvResult);
+            tvResult.setText(joinLivePrefixWithPartial(base, tail.prefix));
+            moveCursorToEnd(tvResult);
+            ImeTextEditHelper.applyNewLineAtEndToEditText(tvResult);
         }
         mainVoiceCommandConsumed = true;
         return true;
@@ -609,8 +660,16 @@ public class MainActivity extends AppCompatActivity {
             mainLiveAppendPrefix = null;
             if (!applyVoiceCommandToResultIfMatches(fin)) {
                 VoiceInputUndoStack.pushFromEditText(tvResult);
-                if (append.isChecked()) tvResult.append(fin + " ");
-                else tvResult.setText(fin);
+                if (append.isChecked()) {
+                    if (!fin.trim().isEmpty()) {
+                        appendTranscriptChunkWithGap(fin + " ");
+                    } else {
+                        moveCursorToEnd(tvResult);
+                    }
+                } else {
+                    tvResult.setText(fin);
+                    moveCursorToEnd(tvResult);
+                }
             }
         } else {
             ImeTextEditHelper.VoiceCommandTail tail =
@@ -625,11 +684,12 @@ public class MainActivity extends AppCompatActivity {
                         if (!tail.prefix.isEmpty()) {
                             appendTranscriptPrefixToEditText(tvResult, tail.prefix);
                         }
+                        moveCursorToEnd(tvResult);
                     } else {
                         VoiceInputUndoStack.pushFromEditText(tvResult);
-                        tvResult.setText(base + tail.prefix);
-                        tvResult.setSelection(tvResult.getText().length());
-                        ImeTextEditHelper.applyNewLineToEditText(tvResult);
+                        tvResult.setText(joinLivePrefixWithPartial(base, tail.prefix));
+                        moveCursorToEnd(tvResult);
+                        ImeTextEditHelper.applyNewLineAtEndToEditText(tvResult);
                     }
                 }
                 mainVoiceCommandConsumed = false;
@@ -685,7 +745,12 @@ public class MainActivity extends AppCompatActivity {
                     runOnUiThread(() -> {
                         if (!applyVoiceCommandToResultIfMatches(result)) {
                             VoiceInputUndoStack.pushFromEditText(tvResult);
-                            tvResult.append(result);
+                            if (append.isChecked()) {
+                                appendTranscriptChunkWithGap(result);
+                            } else {
+                                tvResult.setText(result);
+                                moveCursorToEnd(tvResult);
+                            }
                         }
                     });
                 } else {
@@ -693,7 +758,12 @@ public class MainActivity extends AppCompatActivity {
                     runOnUiThread(() -> {
                         if (!applyVoiceCommandToResultIfMatches(whisperResult.getResult())) {
                             VoiceInputUndoStack.pushFromEditText(tvResult);
-                            tvResult.append(whisperResult.getResult());
+                            if (append.isChecked()) {
+                                appendTranscriptChunkWithGap(whisperResult.getResult());
+                            } else {
+                                tvResult.setText(whisperResult.getResult());
+                                moveCursorToEnd(tvResult);
+                            }
                         }
                     });
                 }
