@@ -223,9 +223,18 @@ public final class ImeTextEditHelper {
     }
 
     /**
-     * Removes the last sentence before the cursor in an {@link EditText}.
+     * Pops {@link VoiceInputUndoStack} if possible; otherwise removes the last sentence before the cursor.
      */
     public static boolean applyUndoToEditText(EditText et) {
+        if (et == null) return false;
+        if (VoiceInputUndoStack.popToEditText(et)) {
+            Log.d(TAG, "voice undo: stack pop applied to EditText");
+            return true;
+        }
+        return applySentenceUndoFallbackToEditText(et);
+    }
+
+    static boolean applySentenceUndoFallbackToEditText(EditText et) {
         if (et == null) return false;
         String full = et.getText().toString();
         int selStart = et.getSelectionStart();
@@ -235,17 +244,29 @@ public final class ImeTextEditHelper {
         int newSel = computeUndoNewCursor(full, selStart, selEnd, newFull);
         et.setText(newFull);
         et.setSelection(Math.min(newSel, newFull.length()));
-        Log.d(TAG, "voice undo: applied to EditText");
+        Log.d(TAG, "voice undo: sentence fallback applied to EditText");
         return true;
     }
 
     /**
-     * Removes the last sentence (by . ! ? or common CJK marks) before the cursor; leaves text after
-     * the cursor unchanged. Requires a collapsed selection.
-     *
-     * @return true if the field was updated
+     * Pops {@link VoiceInputUndoStack} if possible; otherwise removes the last sentence before the cursor.
      */
     public static boolean applyScratchThat(InputConnection ic) {
+        if (ic == null) {
+            Log.w(TAG, "scratch: apply failed — InputConnection null");
+            return false;
+        }
+        if (VoiceInputUndoStack.popToInputConnection(ic)) {
+            Log.d(TAG, "voice undo: stack pop applied");
+            return true;
+        }
+        return applySentenceUndoFallback(ic);
+    }
+
+    /**
+     * Sentence-based removal when the undo stack is empty (legacy behavior).
+     */
+    public static boolean applySentenceUndoFallback(InputConnection ic) {
         if (ic == null) {
             Log.w(TAG, "scratch: apply failed — InputConnection null");
             return false;
@@ -289,7 +310,7 @@ public final class ImeTextEditHelper {
         } finally {
             ic.endBatchEdit();
         }
-        Log.d(TAG, "scratch: applied");
+        Log.d(TAG, "scratch: sentence fallback applied");
         return true;
     }
 

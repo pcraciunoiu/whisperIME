@@ -491,15 +491,17 @@ public class WhisperInputMethodService extends InputMethodService {
                         ImeTextEditHelper.VoiceCommandTail tail =
                                 ImeTextEditHelper.findTrailingVoiceCommand(result, undo, nl);
                         if (tail.hasCommand()) {
-                            ImeTextEditHelper.commitTranscriptPrefix(ic, tail.prefix);
                             if (tail.kind == ImeTextEditHelper.VoiceCommandKind.UNDO) {
                                 Log.d(TAG, "voice undo: Whisper tail command=\"" + summarizeForLog(result) + "\"");
                                 commitSuccess = ImeTextEditHelper.applyScratchThat(ic);
                             } else {
                                 Log.d(TAG, "voice newline: Whisper tail command=\"" + summarizeForLog(result) + "\"");
+                                VoiceInputUndoStack.pushFromInputConnection(ic);
+                                ImeTextEditHelper.commitTranscriptPrefix(ic, tail.prefix);
                                 commitSuccess = ImeTextEditHelper.applyNewLine(ic);
                             }
                         } else {
+                            VoiceInputUndoStack.pushFromInputConnection(ic);
                             commitSuccess = ic.commitText(result.trim() + " ", 1);
                         }
                     }
@@ -557,12 +559,16 @@ public class WhisperInputMethodService extends InputMethodService {
         ImeTextEditHelper.VoiceCommandTail tail =
                 ImeTextEditHelper.findTrailingVoiceCommand(partial, undo, nl);
         if (tail.hasCommand()) {
-            ic.setComposingText(tail.prefix, 1);
             if (tail.kind == ImeTextEditHelper.VoiceCommandKind.UNDO) {
                 Log.d(TAG, "voice undo: live composing tail=\"" + summarizeForLog(partial) + "\"");
-                ImeTextEditHelper.applyScratchThat(ic);
+                if (!VoiceInputUndoStack.popToInputConnection(ic)) {
+                    ImeTextEditHelper.applySentenceUndoFallback(ic);
+                }
+                ic.setComposingText(tail.prefix, 1);
             } else {
                 Log.d(TAG, "voice newline: live composing tail=\"" + summarizeForLog(partial) + "\"");
+                VoiceInputUndoStack.pushFromInputConnection(ic);
+                ic.setComposingText(tail.prefix, 1);
                 ImeTextEditHelper.applyNewLine(ic);
             }
             imeVoiceCommandConsumed = true;
@@ -590,13 +596,14 @@ public class WhisperInputMethodService extends InputMethodService {
             if (hadLivePartials) {
                 ic.setComposingText("", 1);
             }
-            if (!tail.prefix.isEmpty()) {
-                ImeTextEditHelper.commitTranscriptPrefix(ic, tail.prefix);
-            }
             if (!imeVoiceCommandConsumed) {
                 if (tail.kind == ImeTextEditHelper.VoiceCommandKind.UNDO) {
                     ImeTextEditHelper.applyScratchThat(ic);
                 } else {
+                    VoiceInputUndoStack.pushFromInputConnection(ic);
+                    if (!tail.prefix.isEmpty()) {
+                        ImeTextEditHelper.commitTranscriptPrefix(ic, tail.prefix);
+                    }
                     ImeTextEditHelper.applyNewLine(ic);
                 }
             }
@@ -604,6 +611,7 @@ public class WhisperInputMethodService extends InputMethodService {
             return;
         }
         if (t.length() > 0) {
+            VoiceInputUndoStack.pushFromInputConnection(ic);
             ic.commitText(t + " ", 1);
         } else if (hadLivePartials) {
             ic.finishComposingText();

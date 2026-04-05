@@ -67,7 +67,7 @@
     <string name="whisper_model_missing">Whisper TFLite model is not installed. Open the download screen and fetch Whisper models.</string>
     <string name="parakeet_models_missing">Parakeet ONNX models are not installed. Download them from the setup screen.</string>
     <string name="parakeet_start_failed">Could not start Parakeet (permission or models).</string>
-    <string name="voice_undo_phrases_label">Undo last sentence (comma-separated phrases)</string>
+    <string name="voice_undo_phrases_label">Undo last voice edit (comma-separated phrases)</string>
     <string name="voice_newline_phrases_label">New line (comma-separated phrases)</string>
     <string name="voice_undo_phrases_default" translatable="false">scratch that, scratched that</string>
     <string name="voice_newline_phrases_default" translatable="false">new line</string>

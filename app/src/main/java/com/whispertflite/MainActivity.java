@@ -565,11 +565,12 @@ public class MainActivity extends AppCompatActivity {
         if (!tail.hasCommand()) {
             return false;
         }
-        if (!tail.prefix.isEmpty()) {
-            appendTranscriptPrefixToEditText(tvResult, tail.prefix);
-        }
         if (tail.kind == ImeTextEditHelper.VoiceCommandKind.UNDO) {
             return ImeTextEditHelper.applyUndoToEditText(tvResult);
+        }
+        VoiceInputUndoStack.pushFromEditText(tvResult);
+        if (!tail.prefix.isEmpty()) {
+            appendTranscriptPrefixToEditText(tvResult, tail.prefix);
         }
         return ImeTextEditHelper.applyNewLineToEditText(tvResult);
     }
@@ -583,13 +584,18 @@ public class MainActivity extends AppCompatActivity {
         if (!tail.hasCommand()) {
             return false;
         }
-        String base = liveAppendPrefix != null ? liveAppendPrefix : "";
-        String vis = base + tail.prefix;
-        tvResult.setText(vis);
-        tvResult.setSelection(vis.length());
         if (tail.kind == ImeTextEditHelper.VoiceCommandKind.UNDO) {
-            ImeTextEditHelper.applyUndoToEditText(tvResult);
+            if (!VoiceInputUndoStack.popToEditText(tvResult)) {
+                ImeTextEditHelper.applySentenceUndoFallbackToEditText(tvResult);
+            }
+            if (!tail.prefix.isEmpty()) {
+                appendTranscriptPrefixToEditText(tvResult, tail.prefix);
+            }
         } else {
+            String base = liveAppendPrefix != null ? liveAppendPrefix : "";
+            VoiceInputUndoStack.pushFromEditText(tvResult);
+            tvResult.setText(base + tail.prefix);
+            tvResult.setSelection(tvResult.getText().length());
             ImeTextEditHelper.applyNewLineToEditText(tvResult);
         }
         mainVoiceCommandConsumed = true;
@@ -602,6 +608,7 @@ public class MainActivity extends AppCompatActivity {
         if (!liveNow) {
             mainLiveAppendPrefix = null;
             if (!applyVoiceCommandToResultIfMatches(fin)) {
+                VoiceInputUndoStack.pushFromEditText(tvResult);
                 if (append.isChecked()) tvResult.append(fin + " ");
                 else tvResult.setText(fin);
             }
@@ -611,11 +618,17 @@ public class MainActivity extends AppCompatActivity {
             if (tail.hasCommand()) {
                 if (!mainVoiceCommandConsumed) {
                     String base = mainLiveAppendPrefix != null ? mainLiveAppendPrefix : "";
-                    tvResult.setText(base + tail.prefix);
-                    tvResult.setSelection(tvResult.getText().length());
                     if (tail.kind == ImeTextEditHelper.VoiceCommandKind.UNDO) {
-                        ImeTextEditHelper.applyUndoToEditText(tvResult);
+                        if (!VoiceInputUndoStack.popToEditText(tvResult)) {
+                            ImeTextEditHelper.applySentenceUndoFallbackToEditText(tvResult);
+                        }
+                        if (!tail.prefix.isEmpty()) {
+                            appendTranscriptPrefixToEditText(tvResult, tail.prefix);
+                        }
                     } else {
+                        VoiceInputUndoStack.pushFromEditText(tvResult);
+                        tvResult.setText(base + tail.prefix);
+                        tvResult.setSelection(tvResult.getText().length());
                         ImeTextEditHelper.applyNewLineToEditText(tvResult);
                     }
                 }
@@ -671,6 +684,7 @@ public class MainActivity extends AppCompatActivity {
                     String result = simpleChinese ? ZhConverterUtil.toSimple(whisperResult.getResult()) : ZhConverterUtil.toTraditional(whisperResult.getResult());
                     runOnUiThread(() -> {
                         if (!applyVoiceCommandToResultIfMatches(result)) {
+                            VoiceInputUndoStack.pushFromEditText(tvResult);
                             tvResult.append(result);
                         }
                     });
@@ -678,6 +692,7 @@ public class MainActivity extends AppCompatActivity {
                     runOnUiThread(() -> layoutModeChinese.setVisibility(View.GONE));
                     runOnUiThread(() -> {
                         if (!applyVoiceCommandToResultIfMatches(whisperResult.getResult())) {
+                            VoiceInputUndoStack.pushFromEditText(tvResult);
                             tvResult.append(whisperResult.getResult());
                         }
                     });
