@@ -17,6 +17,14 @@ For **signed releases** (`.github/workflows/release.yml`), add these [repository
 
 Encode locally: `base64 -w0 release.keystore` (GNU coreutils; on macOS omit `-w0` or use `base64 -i`).
 
+**If CI decode fails:** Secrets are per-repository — set them on your fork, not only upstream. Paste the base64 as **one line** (no email/Slack line wrapping). Verify locally before saving the secret:
+
+```bash
+printf '%s' "$KEYSTORE_BASE64" | tr -d '\n\r' | base64 -d -i > /tmp/from-secret.keystore
+sha256sum release.keystore /tmp/from-secret.keystore   # must match
+keytool -list -keystore /tmp/from-secret.keystore -storepass "$KEYSTORE_PASSWORD"
+```
+
 **Triggers**
 
 - Push a Git tag matching `v*` (e.g. `v3.8`) to build a **release** APK and attach it to a GitHub Release for that tag.
