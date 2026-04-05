@@ -1,19 +1,18 @@
-Whisper is an input method editor (IME) with voice recognition based on Whisper
+SpeechToText is an input method editor (IME) with on-device speech recognition. It supports the Whisper (TFLite), Parakeet (ONNX streaming), and Moonshine Base (English) engines—pick one in the app.
 
-It can work as standalone app and also offers an IME which can e.g. be activated
+It can work as a standalone app and also offers an IME which can e.g. be activated
 via the microphone button in <a href="https://f-droid.org/packages/helium314.keyboard/">HeliBoard</a>.
 
-At first start it needs to download the Whisper models from Hugging Face.
-This is the only use of the internet permission.
+Whisper models are downloaded from Hugging Face on first use (large download). Parakeet and Moonshine use their own model downloads from the app. Internet is used for downloads and (depending on engine) not required after setup.
 
-Voice recognition works completely offline.
+Voice recognition runs on your device (no cloud API in this build).
 
-As standalone app Whisper can also translate any supported language to English.
+As a standalone app you can also translate supported languages to English with Whisper.
 
-To get the most out of Whisper:
+To get the most out of SpeechToText:
 <ul>
-<li>Press and hold the button while speaking</li>
+<li>Press and hold the button while speaking (or use live transcription where supported)</li>
 <li>Pause briefly before starting to speak</li>
 <li>Speak clearly, loudly, and at a moderate pace</li>
-<li>Please note that there is a limit of 30s for each recording</li>
+<li>Hold-to-talk is limited to about 60 seconds per recording</li>
 </ul>

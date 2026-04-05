@@ -1,0 +1,1 @@
+Publish as org.speechtotext.input (installs separately from org.woheller69.whisper). App display name SpeechToText. CI workflows for debug and signed release builds.

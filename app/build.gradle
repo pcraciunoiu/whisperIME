@@ -12,12 +12,24 @@ android {
     }
     
     defaultConfig {
-        applicationId "org.woheller69.whisper"
+        applicationId "org.speechtotext.input"
         minSdk 28
         targetSdk 35
-        versionCode 37
-        versionName "3.7"
+        versionCode 38
+        versionName "3.8"
 
+    }
+
+    def releaseKeystorePath = System.getenv("KEYSTORE_FILE")
+    signingConfigs {
+        release {
+            if (releaseKeystorePath != null) {
+                storeFile file(releaseKeystorePath)
+                storePassword System.getenv("KEYSTORE_PASSWORD")
+                keyAlias System.getenv("KEY_ALIAS")
+                keyPassword System.getenv("KEY_PASSWORD")
+            }
+        }
     }
 
     buildFeatures {
@@ -27,6 +39,11 @@ android {
 
     buildTypes {
         release {
+            if (releaseKeystorePath != null) {
+                signingConfig signingConfigs.release
+            } else {
+                signingConfig signingConfigs.debug
+            }
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             ndk {

@@ -1,1 +1,1 @@
-Voice recognition based on Whisper
+Voice IME and app: Whisper, Parakeet, and Moonshine engines
