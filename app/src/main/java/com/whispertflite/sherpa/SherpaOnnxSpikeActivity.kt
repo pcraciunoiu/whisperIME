@@ -20,6 +20,7 @@ import com.k2fsa.sherpa.onnx.getFeatureConfig
 import com.k2fsa.sherpa.onnx.getModelConfig
 import com.whispertflite.R
 import com.whispertflite.utils.ThemeUtils
+import com.whispertflite.sherpa.absolutizeModelConfig
 import java.io.File
 import kotlin.concurrent.thread
 
@@ -42,8 +43,8 @@ class SherpaOnnxSpikeActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        ThemeUtils.setStatusBarAppearance(this)
         setContentView(R.layout.activity_sherpa_spike)
+        ThemeUtils.setStatusBarAppearance(this)
 
         val status = findViewById<TextView>(R.id.sherpa_spike_status)
         val record = findViewById<Button>(R.id.sherpa_spike_record)
@@ -78,6 +79,13 @@ class SherpaOnnxSpikeActivity : AppCompatActivity() {
             }
         } catch (e: Throwable) {
             Log.e(TAG, "initRecognizer failed", e)
+            if (e is UnsatisfiedLinkError || e.cause is UnsatisfiedLinkError) {
+                Log.e(
+                    TAG,
+                    "Native link error: ensure libonnxruntime.so matches sherpa AAR (see overlaySherpaOnnxRuntime in app/build.gradle). " +
+                        "If Parakeet/Moonshine break, ORT symbol mix may need a different packaging strategy.",
+                )
+            }
             status.text = getString(
                 R.string.sherpa_spike_init_failed,
                 e.message ?: e.javaClass.simpleName,
@@ -100,12 +108,14 @@ class SherpaOnnxSpikeActivity : AppCompatActivity() {
             PackageManager.PERMISSION_GRANTED
 
     private fun initRecognizer() {
+        logNativeLibraryDiagnostics()
         val external = getExternalFilesDir(null)
             ?: throw IllegalStateException("no external files dir")
         val modelsRoot = File(external, SherpaOnnxSpikePaths.MODELS_SUBDIR)
         val rel = getModelConfig(6)
             ?: throw IllegalStateException("getModelConfig(6)==null")
-        val mcfg = absolutizePaths(rel, modelsRoot)
+        val mcfg = absolutizeModelConfig(rel, modelsRoot)
+        logModelFileDiagnostics(mcfg)
         val config = OnlineRecognizerConfig(
             featConfig = getFeatureConfig(SAMPLE_RATE, 80),
             modelConfig = mcfg,
@@ -116,14 +126,39 @@ class SherpaOnnxSpikeActivity : AppCompatActivity() {
         Log.i(TAG, "OnlineRecognizer ready (files under ${modelsRoot.absolutePath})")
     }
 
-    private fun absolutizePaths(rel: OnlineModelConfig, modelsRoot: File): OnlineModelConfig {
-        fun ap(path: String): String = File(modelsRoot, path).absolutePath
-        val t = rel.transducer
-        t.encoder = ap(t.encoder)
-        t.decoder = ap(t.decoder)
-        t.joiner = ap(t.joiner)
-        rel.tokens = ap(rel.tokens)
-        return rel
+    /** Log packaged .so names and sizes — helps debug OrtGetApiBase / ORT mismatch. */
+    private fun logNativeLibraryDiagnostics() {
+        val dir = applicationInfo.nativeLibraryDir?.let { File(it) } ?: run {
+            Log.w(TAG, "nativeLibraryDir is null")
+            return
+        }
+        Log.i(TAG, "nativeLibraryDir=${dir.absolutePath}")
+        val names = dir.list()?.filter { it.endsWith(".so") }?.sorted() ?: emptyList()
+        Log.i(TAG, "native .so count=${names.size}: ${names.joinToString(", ")}")
+        for (name in listOf("libonnxruntime.so", "libsherpa-onnx-jni.so", "libonnxruntime4j_jni.so")) {
+            val f = File(dir, name)
+            if (f.isFile) {
+                Log.i(TAG, "  $name size=${f.length()} bytes")
+            } else {
+                Log.w(TAG, "  missing $name")
+            }
+        }
+    }
+
+    private fun logModelFileDiagnostics(mcfg: OnlineModelConfig) {
+        val paths = listOf(
+            mcfg.transducer.encoder,
+            mcfg.transducer.decoder,
+            mcfg.transducer.joiner,
+            mcfg.tokens,
+        )
+        for (p in paths) {
+            val f = File(p)
+            Log.i(
+                TAG,
+                "model file ${f.name} exists=${f.isFile} size=${if (f.isFile) f.length() else -1} path=$p",
+            )
+        }
     }
 
     private fun startRecording(status: TextView, record: Button, transcript: TextView) {
