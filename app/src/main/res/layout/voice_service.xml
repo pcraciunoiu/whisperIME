@@ -21,7 +21,7 @@
         android:id="@+id/layout_sherpa_ime_options"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
+        android:orientation="vertical"
         android:visibility="gone">
 
         <CheckBox
@@ -30,6 +30,25 @@
             android:layout_height="wrap_content"
             android:text="@string/sherpa_punct_enhance_checkbox"
             android:textSize="14sp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="14sp"
+                android:textColor="@color/colorAccent"
+                android:text="@string/select_sherpa_punct_model" />
+
+            <Spinner
+                android:id="@+id/spnrSherpaPunctIme"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1" />
+        </LinearLayout>
     </LinearLayout>
 
     <RelativeLayout

@@ -55,7 +55,9 @@ import com.whispertflite.moonshine.MoonshineModelFiles;
 import com.whispertflite.moonshine.MoonshinePocActivity;
 import com.whispertflite.moonshine.MoonshinePreferences;
 import com.whispertflite.sherpa.SherpaCatalogEntry;
+import com.whispertflite.sherpa.SherpaPunctCatalogEntry;
 import com.whispertflite.sherpa.SherpaPreferences;
+import com.whispertflite.sherpa.SherpaPunctuationEngine;
 import com.whispertflite.sherpa.SherpaStreamingRecorder;
 import com.whispertflite.parakeet.ParakeetEnginePool;
 import com.whispertflite.parakeet.ParakeetModelFiles;
@@ -125,6 +127,7 @@ public class MainActivity extends AppCompatActivity {
     private Spinner spinnerTflite;
     private Spinner spnrSherpaModel;
     private CheckBox cbSherpaPunctEnhance;
+    private Spinner spnrSherpaPunctModel;
     private CountDownTimer countDownTimer;
     private Spinner spinnerLanguage;
     /** Retained so {@link #refreshWhisperTfliteSpinner()} can update language rules after download. */
@@ -163,6 +166,7 @@ public class MainActivity extends AppCompatActivity {
         super.onResume();
         refreshWhisperTfliteSpinner();
         syncAsrEngineSpinnerToPrefs();
+        syncSherpaPunctSpinnerToPrefs();
     }
 
     private void syncAsrEngineSpinnerToPrefs() {
@@ -173,6 +177,22 @@ public class MainActivity extends AppCompatActivity {
         for (int i = 0; i < mAsrEngineValues.length; i++) {
             if (mAsrEngineValues[i].equals(cur)) {
                 spnrAsrEngine.setSelection(i, false);
+                break;
+            }
+        }
+    }
+
+    private void syncSherpaPunctSpinnerToPrefs() {
+        if (spnrSherpaPunctModel == null) {
+            return;
+        }
+        String curId = SherpaPreferences.selectedPunctModelId(this);
+        java.util.List<SherpaPunctCatalogEntry> list = SherpaPunctCatalogEntry.ENTRIES;
+        for (int i = 0; i < list.size(); i++) {
+            if (list.get(i).getId().equals(curId)) {
+                if (spnrSherpaPunctModel.getSelectedItemPosition() != i) {
+                    spnrSherpaPunctModel.setSelection(i, false);
+                }
                 break;
             }
         }
@@ -261,6 +281,8 @@ public class MainActivity extends AppCompatActivity {
         cbSherpaPunctEnhance.setChecked(SherpaPreferences.isPunctuationEnhanceEnabled(this));
         cbSherpaPunctEnhance.setOnCheckedChangeListener((buttonView, isChecked) ->
                 SherpaPreferences.setPunctuationEnhanceEnabled(MainActivity.this, isChecked));
+        spnrSherpaPunctModel = findViewById(R.id.spnrSherpaPunctModel);
+        bindSherpaPunctSpinner();
         spnrAsrEngine = findViewById(R.id.spnrAsrEngine);
         ArrayAdapter<CharSequence> engineAdapter = ArrayAdapter.createFromResource(this,
                 R.array.asr_engine_entries, android.R.layout.simple_spinner_item);
@@ -1117,6 +1139,37 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
                 SherpaPreferences.setSelectedCatalogId(MainActivity.this, list.get(position).getId());
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {
+            }
+        });
+    }
+
+    private void bindSherpaPunctSpinner() {
+        java.util.List<String> labels = new java.util.ArrayList<>();
+        for (SherpaPunctCatalogEntry e : SherpaPunctCatalogEntry.ENTRIES) {
+            labels.add(getString(e.getLabelRes()));
+        }
+        ArrayAdapter<String> ad = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, labels);
+        ad.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        spnrSherpaPunctModel.setAdapter(ad);
+        String curId = SherpaPreferences.selectedPunctModelId(this);
+        int sel = 0;
+        java.util.List<SherpaPunctCatalogEntry> list = SherpaPunctCatalogEntry.ENTRIES;
+        for (int i = 0; i < list.size(); i++) {
+            if (list.get(i).getId().equals(curId)) {
+                sel = i;
+                break;
+            }
+        }
+        spnrSherpaPunctModel.setSelection(sel, false);
+        spnrSherpaPunctModel.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                SherpaPreferences.setSelectedPunctModelId(MainActivity.this, list.get(position).getId());
+                SherpaPunctuationEngine.invalidate();
             }
 
             @Override

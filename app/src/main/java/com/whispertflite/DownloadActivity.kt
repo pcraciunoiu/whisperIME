@@ -21,6 +21,8 @@ import com.whispertflite.sherpa.SherpaCatalogEntry
 import com.whispertflite.sherpa.SherpaDownloader
 import com.whispertflite.sherpa.SherpaModelFiles
 import com.whispertflite.sherpa.SherpaPreferences
+import com.whispertflite.sherpa.SherpaPunctCatalogEntry
+import com.whispertflite.sherpa.SherpaPunctuationDownloader
 import com.whispertflite.utils.Downloader
 import com.whispertflite.utils.ThemeUtils
 
@@ -65,6 +67,7 @@ class DownloadActivity : AppCompatActivity() {
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
         bindSherpaVariantSpinner()
+        bindSherpaPunctSpinner()
         updateSherpaVariantUi(initial)
     }
 
@@ -86,11 +89,31 @@ class DownloadActivity : AppCompatActivity() {
         }
     }
 
+    private fun bindSherpaPunctSpinner() {
+        val labels = SherpaPunctCatalogEntry.ENTRIES.map { getString(it.labelRes) }
+        val ad = android.widget.ArrayAdapter(this, android.R.layout.simple_spinner_item, labels)
+        ad.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        binding?.spinnerSherpaPunct?.adapter = ad
+        val cur = SherpaPreferences.selectedPunctModelId(this)
+        val idx = SherpaPunctCatalogEntry.ENTRIES.indexOfFirst { it.id == cur }.takeIf { it >= 0 } ?: 0
+        binding?.spinnerSherpaPunct?.setSelection(idx, false)
+        binding?.spinnerSherpaPunct?.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                val idStr = SherpaPunctCatalogEntry.ENTRIES.getOrNull(position)?.id ?: return
+                SherpaPreferences.setSelectedPunctModelId(this@DownloadActivity, idStr)
+            }
+
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+    }
+
     private fun updateSherpaVariantUi(engine: String) {
         val show = AsrEnginePreferences.SHERPA == engine
         val vis = if (show) View.VISIBLE else View.GONE
         binding?.labelSherpaVariant?.visibility = vis
         binding?.spinnerSherpaVariant?.visibility = vis
+        binding?.labelSherpaPunct?.visibility = vis
+        binding?.spinnerSherpaPunct?.visibility = vis
     }
 
     private fun legacyWizardEngine(sp: SharedPreferences): String? = when {
@@ -217,8 +240,20 @@ class DownloadActivity : AppCompatActivity() {
                                 .apply()
                             AsrEnginePreferences.setMainEngine(this, AsrEnginePreferences.SHERPA)
                         }
-                        binding?.downloadProgress?.progress = 100
-                        binding?.buttonStart?.visibility = View.VISIBLE
+                        val punctEntry = SherpaPunctCatalogEntry.requireById(
+                            SherpaPreferences.selectedPunctModelId(this),
+                        )
+                        binding?.downloadProgress?.progress = 0
+                        SherpaPunctuationDownloader.downloadPunctModelIfNeeded(
+                            this,
+                            punctEntry,
+                            binding?.downloadProgress,
+                            binding?.downloadSize,
+                            Runnable {
+                                binding?.downloadProgress?.progress = 100
+                                binding?.buttonStart?.visibility = View.VISIBLE
+                            },
+                        )
                     },
                 )
             }

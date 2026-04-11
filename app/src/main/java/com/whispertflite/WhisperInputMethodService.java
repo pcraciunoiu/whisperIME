@@ -23,10 +23,13 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
+import android.widget.AdapterView;
+import android.widget.ArrayAdapter;
 import android.widget.CheckBox;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
+import android.widget.Spinner;
 import android.widget.TextView;
 
 import androidx.core.content.ContextCompat;
@@ -46,7 +49,9 @@ import com.whispertflite.parakeet.ParakeetEnginePool;
 import com.whispertflite.parakeet.ParakeetModelFiles;
 import com.whispertflite.parakeet.ParakeetStreamingRecorder;
 import com.whispertflite.sherpa.SherpaModelFiles;
+import com.whispertflite.sherpa.SherpaPunctCatalogEntry;
 import com.whispertflite.sherpa.SherpaPreferences;
+import com.whispertflite.sherpa.SherpaPunctuationEngine;
 import com.whispertflite.sherpa.SherpaStreamingRecorder;
 import com.whispertflite.utils.HapticFeedback;
 import com.whispertflite.utils.InputLang;
@@ -79,6 +84,7 @@ public class WhisperInputMethodService extends InputMethodService {
     private LinearLayout layoutButtons;
     private LinearLayout layoutSherpaImeOptions;
     private CheckBox cbSherpaPunctIme;
+    private Spinner spnrSherpaPunctIme;
     private MoonshineHoldRecorder imeMoonshineRecorder = null;
     private ParakeetStreamingRecorder imeParakeetRecorder = null;
     private SherpaStreamingRecorder imeSherpaRecorder = null;
@@ -247,6 +253,8 @@ public class WhisperInputMethodService extends InputMethodService {
             cbSherpaPunctIme.setOnCheckedChangeListener((buttonView, isChecked) ->
                     SherpaPreferences.setPunctuationEnhanceEnabled(WhisperInputMethodService.this, isChecked));
         }
+        spnrSherpaPunctIme = view.findViewById(R.id.spnrSherpaPunctIme);
+        bindSherpaPunctImeSpinner();
         updateSherpaImeOptionsVisibility();
         checkRecordPermission();
 
@@ -603,6 +611,50 @@ public class WhisperInputMethodService extends InputMethodService {
         if (layoutSherpaImeOptions == null) return;
         boolean show = AsrEnginePreferences.SHERPA.equals(AsrEnginePreferences.mainEngine(this));
         layoutSherpaImeOptions.setVisibility(show ? View.VISIBLE : View.GONE);
+        if (show && spnrSherpaPunctIme != null) {
+            String curId = SherpaPreferences.selectedPunctModelId(this);
+            java.util.List<SherpaPunctCatalogEntry> list = SherpaPunctCatalogEntry.ENTRIES;
+            for (int i = 0; i < list.size(); i++) {
+                if (list.get(i).getId().equals(curId)) {
+                    if (spnrSherpaPunctIme.getSelectedItemPosition() != i) {
+                        spnrSherpaPunctIme.setSelection(i, false);
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+    private void bindSherpaPunctImeSpinner() {
+        if (spnrSherpaPunctIme == null) return;
+        java.util.List<String> labels = new java.util.ArrayList<>();
+        for (SherpaPunctCatalogEntry e : SherpaPunctCatalogEntry.ENTRIES) {
+            labels.add(getString(e.getLabelRes()));
+        }
+        ArrayAdapter<String> ad = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, labels);
+        ad.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        spnrSherpaPunctIme.setAdapter(ad);
+        String curId = SherpaPreferences.selectedPunctModelId(this);
+        int sel = 0;
+        java.util.List<SherpaPunctCatalogEntry> list = SherpaPunctCatalogEntry.ENTRIES;
+        for (int i = 0; i < list.size(); i++) {
+            if (list.get(i).getId().equals(curId)) {
+                sel = i;
+                break;
+            }
+        }
+        spnrSherpaPunctIme.setSelection(sel, false);
+        spnrSherpaPunctIme.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                SherpaPreferences.setSelectedPunctModelId(WhisperInputMethodService.this, list.get(position).getId());
+                SherpaPunctuationEngine.invalidate();
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {
+            }
+        });
     }
 
     private void startRecording() {
