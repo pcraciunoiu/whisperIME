@@ -27,3 +27,7 @@ This matches the refactor audit: *extract shared ASR/session logic with RS as th
 
 - [offline-asr-research.md](offline-asr-research.md) — shipped engines and research notes.
 - [parakeet-onnxruntime.md](parakeet-onnxruntime.md) — ORT merge with Moonshine.
+
+### Sherpa-onnx spike (dev-only)
+
+Not part of the production engine list or `RecognitionService` routing. Debug builds can open [`SherpaOnnxSpikeActivity`](../app/src/main/java/com/whispertflite/sherpa/SherpaOnnxSpikeActivity.kt) from the main screen to trial k2-fsa sherpa-onnx streaming ASR after models are installed manually (see **Sherpa-onnx spike** in [offline-asr-research.md](offline-asr-research.md)). A future fourth engine would still go through RecognitionService-first integration above.

@@ -87,6 +87,18 @@ See [parakeet-onnxruntime.md](parakeet-onnxruntime.md) — duplicate `libonnxrun
 
 **Code:** [`SherpaOnnxSpikeActivity`](../app/src/main/java/com/whispertflite/sherpa/SherpaOnnxSpikeActivity.kt), [`SherpaOnnxSpikePaths`](../app/src/main/java/com/whispertflite/sherpa/SherpaOnnxSpikePaths.kt). Debug builds expose a **Sherpa spike** entry on the main screen; release builds hide it.
 
-**Measurements:** Fill in stability/latency/WER after on-device runs (see [wer-benchmark.md](wer-benchmark.md)).
+**Measurements (on-device, to fill in after runs):**
+
+| Check | Result |
+|-------|--------|
+| Load / JNI | e.g. no `UnsatisfiedLinkError`; tag `SherpaOnnxSpike` in logcat |
+| Stability | e.g. cold start + 5 record sessions without crash |
+| Latency | e.g. rough RTF from log timestamps |
+| WER | optional: same clips as [wer-benchmark.md](wer-benchmark.md) |
+
+**Go / no-go (pre–fourth-engine):**
+
+- **Go:** JNI stable with merged MS ORT, acceptable latency/WER vs existing engines on target devices, APK/size acceptable.
+- **No-go:** ORT/symbol conflicts with Parakeet/Moonshine, or quality not worth a fourth download path—keep spike code for dev or remove in a follow-up branch.
 
 **Last updated:** 2026-04-10
