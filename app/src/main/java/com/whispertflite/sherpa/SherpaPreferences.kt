@@ -30,4 +30,11 @@ object SherpaPreferences {
     @JvmStatic
     fun isPunctuationEnhanceEnabled(context: Context): Boolean =
         PreferenceManager.getDefaultSharedPreferences(context).getBoolean(KEY_PUNCT_ENHANCE, true)
+
+    @JvmStatic
+    fun setPunctuationEnhanceEnabled(context: Context, enabled: Boolean) {
+        PreferenceManager.getDefaultSharedPreferences(context).edit()
+            .putBoolean(KEY_PUNCT_ENHANCE, enabled)
+            .apply()
+    }
 }

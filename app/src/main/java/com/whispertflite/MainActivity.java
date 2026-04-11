@@ -121,8 +121,10 @@ public class MainActivity extends AppCompatActivity {
     private Spinner spnrAsrEngine;
     private LinearLayout layoutWhisperModels;
     private LinearLayout layoutSherpaModels;
+    private LinearLayout layoutSherpaOptions;
     private Spinner spinnerTflite;
     private Spinner spnrSherpaModel;
+    private CheckBox cbSherpaPunctEnhance;
     private CountDownTimer countDownTimer;
     private Spinner spinnerLanguage;
     /** Retained so {@link #refreshWhisperTfliteSpinner()} can update language rules after download. */
@@ -238,8 +240,13 @@ public class MainActivity extends AppCompatActivity {
 
         layoutWhisperModels = findViewById(R.id.layout_whisper_models);
         layoutSherpaModels = findViewById(R.id.layout_sherpa_models);
+        layoutSherpaOptions = findViewById(R.id.layout_sherpa_options);
         spnrSherpaModel = findViewById(R.id.spnrSherpaModel);
         bindSherpaModelSpinner();
+        cbSherpaPunctEnhance = findViewById(R.id.cbSherpaPunctEnhance);
+        cbSherpaPunctEnhance.setChecked(SherpaPreferences.isPunctuationEnhanceEnabled(this));
+        cbSherpaPunctEnhance.setOnCheckedChangeListener((buttonView, isChecked) ->
+                SherpaPreferences.setPunctuationEnhanceEnabled(MainActivity.this, isChecked));
         spnrAsrEngine = findViewById(R.id.spnrAsrEngine);
         ArrayAdapter<CharSequence> engineAdapter = ArrayAdapter.createFromResource(this,
                 R.array.asr_engine_entries, android.R.layout.simple_spinner_item);
@@ -1069,6 +1076,7 @@ public class MainActivity extends AppCompatActivity {
         boolean whisper = AsrEnginePreferences.WHISPER.equals(engine);
         layoutWhisperModels.setVisibility(whisper ? View.VISIBLE : View.GONE);
         layoutSherpaModels.setVisibility(AsrEnginePreferences.SHERPA.equals(engine) ? View.VISIBLE : View.GONE);
+        layoutSherpaOptions.setVisibility(AsrEnginePreferences.SHERPA.equals(engine) ? View.VISIBLE : View.GONE);
         boolean liveOk = AsrEnginePreferences.PARAKEET.equals(engine)
                 || AsrEnginePreferences.MOONSHINE.equals(engine)
                 || AsrEnginePreferences.SHERPA.equals(engine)

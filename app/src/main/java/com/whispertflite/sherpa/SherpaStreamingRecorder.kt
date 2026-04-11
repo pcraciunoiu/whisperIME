@@ -1,5 +1,6 @@
 package com.whispertflite.sherpa
 
+import android.annotation.SuppressLint
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
@@ -79,6 +80,7 @@ class SherpaStreamingRecorder(
         return polished
     }
 
+    @SuppressLint("MissingPermission")
     private fun recordLoop(entry: SherpaCatalogEntry, modelsRoot: File) {
         var rec: OnlineRecognizer? = null
         var audioRecord: AudioRecord? = null

@@ -17,6 +17,8 @@ import com.whispertflite.parakeet.ParakeetDownloader
 import com.whispertflite.parakeet.ParakeetEnginePool
 import com.whispertflite.parakeet.ParakeetModelFiles
 import com.whispertflite.parakeet.ParakeetPreferences
+import com.whispertflite.sherpa.SherpaCatalogEntry
+import com.whispertflite.sherpa.SherpaDownloader
 import com.whispertflite.sherpa.SherpaModelFiles
 import com.whispertflite.sherpa.SherpaPreferences
 import com.whispertflite.utils.Downloader
@@ -57,10 +59,38 @@ class DownloadActivity : AppCompatActivity() {
                 val eng = values.getOrElse(position) { AsrEnginePreferences.WHISPER }
                 AsrEnginePreferences.setSetupWizardEngine(this@DownloadActivity, eng)
                 applyWizardDescription(eng)
+                updateSherpaVariantUi(eng)
             }
 
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
+        bindSherpaVariantSpinner()
+        updateSherpaVariantUi(initial)
+    }
+
+    private fun bindSherpaVariantSpinner() {
+        val labels = SherpaCatalogEntry.ENTRIES.map { getString(it.labelRes) }
+        val ad = android.widget.ArrayAdapter(this, android.R.layout.simple_spinner_item, labels)
+        ad.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        binding?.spinnerSherpaVariant?.adapter = ad
+        val cur = SherpaPreferences.selectedCatalogId(this)
+        val idx = SherpaCatalogEntry.ENTRIES.indexOfFirst { it.id == cur }.takeIf { it >= 0 } ?: 0
+        binding?.spinnerSherpaVariant?.setSelection(idx, false)
+        binding?.spinnerSherpaVariant?.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                val idStr = SherpaCatalogEntry.ENTRIES.getOrNull(position)?.id ?: return
+                SherpaPreferences.setSelectedCatalogId(this@DownloadActivity, idStr)
+            }
+
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+    }
+
+    private fun updateSherpaVariantUi(engine: String) {
+        val show = AsrEnginePreferences.SHERPA == engine
+        val vis = if (show) View.VISIBLE else View.GONE
+        binding?.labelSherpaVariant?.visibility = vis
+        binding?.spinnerSherpaVariant?.visibility = vis
     }
 
     private fun legacyWizardEngine(sp: SharedPreferences): String? = when {
@@ -175,13 +205,22 @@ class DownloadActivity : AppCompatActivity() {
             }
             AsrEnginePreferences.SHERPA -> {
                 binding?.buttonUpdate?.visibility = View.GONE
-                android.widget.Toast.makeText(
+                SherpaDownloader.downloadSherpaModels(
                     this,
-                    R.string.download_model_text_sherpa,
-                    android.widget.Toast.LENGTH_LONG,
-                ).show()
-                binding?.downloadProgress?.progress = 100
-                binding?.buttonStart?.visibility = View.VISIBLE
+                    binding?.downloadProgress,
+                    binding?.downloadSize,
+                    Runnable {
+                        val dir = getExternalFilesDir(null)
+                        if (dir != null && SherpaModelFiles.allFilesPresentForSelectedVariant(dir, this)) {
+                            PreferenceManager.getDefaultSharedPreferences(this).edit()
+                                .putBoolean(SherpaPreferences.KEY_USE_SHERPA_MAIN, true)
+                                .apply()
+                            AsrEnginePreferences.setMainEngine(this, AsrEnginePreferences.SHERPA)
+                        }
+                        binding?.downloadProgress?.progress = 100
+                        binding?.buttonStart?.visibility = View.VISIBLE
+                    },
+                )
             }
             AsrEnginePreferences.PARAKEET -> {
                 binding?.buttonUpdate?.visibility = View.GONE

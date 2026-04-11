@@ -23,7 +23,8 @@
     <string name="sherpa_punct_notes_zipformer_en">Char-level; punctuation may be sparse — app can add light offline polish on final text.</string>
     <string name="sherpa_punct_notes_lstm_en">Word-piece; often unpunctuated — offline final polish recommended.</string>
     <string name="download_model_text_parakeet">\nDownload Parakeet ONNX models from Hugging Face (~650 MB). English streaming.</string>
-    <string name="download_model_text_sherpa">\nSherpa-ONNX: download an English streaming model from Hugging Face (see docs/offline-asr-research.md). Unpack under Android/data/…/files/sherpa-onnx-models/&lt;model-dir&gt; so paths match the built-in catalog (encoder/decoder/joiner + tokens.txt).</string>
+    <string name="download_model_text_sherpa">\nSherpa-ONNX: pick a model variant above, then tap Download to fetch ONNX files from Hugging Face into app storage (large; Wi‑Fi recommended). You can still copy files manually — see docs/offline-asr-research.md.</string>
+    <string name="sherpa_punct_enhance_checkbox">Enhance Sherpa final text (offline punctuation &amp; casing)</string>
     <string name="live_transcribe">Transcribe live</string>
     <string name="live_transcribe_hint">While you hold the button: Parakeet, Moonshine, and Sherpa stream partial text; Whisper updates partial text periodically (on-device, throttled). Final text still uses the full recording when you release.</string>
     <string name="models_missing_open_download">Models missing. Opening download screen.</string>

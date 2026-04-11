@@ -77,7 +77,7 @@ See [parakeet-onnxruntime.md](parakeet-onnxruntime.md) — duplicate `libonnxrun
 
 **Punctuation strategy:** Streaming Zipformer/LSTM checkpoints often emit **little or no** punctuation. The app applies **offline, on-device** final-text polish ([`SherpaPunctuationPostProcessor`](../app/src/main/java/com/whispertflite/sherpa/SherpaPunctuationPostProcessor.kt))—no cloud—controlled by `SherpaPreferences.KEY_PUNCT_ENHANCE` (default on). Partials stay raw for latency.
 
-**Downloads:** Manual Hugging Face / `adb` (same spirit as the spike instructions below). Optional automated downloader is future work.
+**Downloads:** The setup screen can **download** ONNX/token files over HTTPS from each catalog entry’s Hugging Face repo (`/resolve/main/…` paths matching `getModelConfig`). Manual `adb` copy still works (same layout as the spike instructions below).
 
 ---
 

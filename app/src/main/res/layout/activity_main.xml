@@ -73,6 +73,21 @@
         </LinearLayout>
 
         <LinearLayout
+            android:id="@+id/layout_sherpa_options"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="10dp"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <CheckBox
+                android:id="@+id/cbSherpaPunctEnhance"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/sherpa_punct_enhance_checkbox" />
+        </LinearLayout>
+
+        <LinearLayout
             android:id="@+id/layout_language"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

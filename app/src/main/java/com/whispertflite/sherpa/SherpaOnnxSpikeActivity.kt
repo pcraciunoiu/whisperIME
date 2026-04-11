@@ -5,6 +5,7 @@ import android.content.pm.PackageManager
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import android.annotation.SuppressLint
 import android.os.Bundle
 import android.util.Log
 import android.widget.Button
@@ -214,6 +215,7 @@ class SherpaOnnxSpikeActivity : AppCompatActivity() {
         record.setText(R.string.sherpa_spike_record_start)
     }
 
+    @SuppressLint("MissingPermission")
     private fun initMicrophone(): Boolean {
         val channel = AudioFormat.CHANNEL_IN_MONO
         val format = AudioFormat.ENCODING_PCM_16BIT
