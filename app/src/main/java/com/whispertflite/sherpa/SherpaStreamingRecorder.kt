@@ -15,6 +15,7 @@ import com.k2fsa.sherpa.onnx.OnlineRecognizerConfig
 import com.k2fsa.sherpa.onnx.getEndpointConfig
 import com.k2fsa.sherpa.onnx.getFeatureConfig
 import com.k2fsa.sherpa.onnx.getModelConfig
+import com.whispertflite.R
 import java.io.File
 import java.util.function.Consumer
 import java.util.concurrent.atomic.AtomicBoolean
@@ -38,6 +39,10 @@ class SherpaStreamingRecorder(
     @Volatile
     private var workerFinalTranscript: String? = null
 
+    /** When true, [stop] skips punctuation polish (e.g. native load error message). */
+    @Volatile
+    private var workerSkipFinalPunctuation: Boolean = false
+
     fun start(): Boolean {
         val root = SherpaModelFiles.modelsRoot(externalFilesDir)
         val entry = SherpaCatalogEntry.requireById(SherpaPreferences.selectedCatalogId(context))
@@ -53,6 +58,7 @@ class SherpaStreamingRecorder(
         }
         stop(join = true)
         workerFinalTranscript = null
+        workerSkipFinalPunctuation = false
         running.set(true)
         worker = Thread({ recordLoop(entry, root!!) }, "SherpaStream").also { it.start() }
         Log.d(TAG, "start() worker scheduled entry=${entry.id}")
@@ -72,7 +78,13 @@ class SherpaStreamingRecorder(
         worker = null
         val raw = workerFinalTranscript ?: ""
         workerFinalTranscript = null
-        val polished = SherpaPunctuationPostProcessor.applyFinal(context.applicationContext, raw)
+        val skipPolish = workerSkipFinalPunctuation
+        workerSkipFinalPunctuation = false
+        val polished = if (skipPolish) {
+            raw
+        } else {
+            SherpaPunctuationPostProcessor.applyFinal(context.applicationContext, raw)
+        }
         Log.i(
             TAG,
             "stop() finalLen=${polished.length} preview=\"${polished.take(80)}\"",
@@ -82,6 +94,17 @@ class SherpaStreamingRecorder(
 
     @SuppressLint("MissingPermission")
     private fun recordLoop(entry: SherpaCatalogEntry, modelsRoot: File) {
+        try {
+            SherpaOnnxNativeBootstrap.loadSherpaJniStack(context.applicationContext)
+        } catch (e: UnsatisfiedLinkError) {
+            Log.e(TAG, "recordLoop: Sherpa native libraries failed to load", e)
+            val msg = context.getString(R.string.sherpa_native_load_failed)
+            workerSkipFinalPunctuation = true
+            workerFinalTranscript = msg
+            mainHandler.post { onPartial.accept(msg) }
+            running.set(false)
+            return
+        }
         var rec: OnlineRecognizer? = null
         var audioRecord: AudioRecord? = null
         try {
@@ -92,11 +115,13 @@ class SherpaStreamingRecorder(
                     return
                 }
             val mcfg = absolutizeModelConfig(rel, modelsRoot)
+            // Hold-to-talk: endpoint detection resets the stream after silence, which clears partial text
+            // (bad for IME composing + main-screen live preview). Silence is handled by finger-up only.
             val config = OnlineRecognizerConfig(
                 featConfig = getFeatureConfig(SAMPLE_RATE, 80),
                 modelConfig = mcfg,
                 endpointConfig = getEndpointConfig(),
-                enableEndpoint = true,
+                enableEndpoint = false,
             )
             rec = OnlineRecognizer(null, config)
 
@@ -136,9 +161,6 @@ class SherpaStreamingRecorder(
                     if (text != lastText) {
                         lastText = text
                         mainHandler.post { onPartial.accept(text) }
-                    }
-                    if (rec.isEndpoint(stream)) {
-                        rec.reset(stream)
                     }
                 }
                 workerFinalTranscript = lastText

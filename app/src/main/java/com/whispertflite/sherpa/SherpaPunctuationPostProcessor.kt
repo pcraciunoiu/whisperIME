@@ -18,7 +18,7 @@ object SherpaPunctuationPostProcessor {
         if (t.isEmpty()) return t
         if (!SherpaPreferences.isPunctuationEnhanceEnabled(context)) return t
 
-        if (!likelyHasPunctuation(t) && t.length >= 24 && t.any { it.isLetter() }) {
+        if (!likelyHasPunctuation(t) && t.length >= 8 && t.any { it.isLetter() }) {
             val last = t.last()
             if (!last.isLetterOrDigit() && last !in ")]}\"'") {
                 // already ends with some symbol; skip
