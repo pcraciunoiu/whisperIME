@@ -30,6 +30,6 @@ object ParakeetConstants {
     const val ASSETS_HANN = "parakeet/hann512.bin"
     const val ASSETS_VOCAB = "parakeet/parakeet_vocab.tsv"
 
-    /** Stored in SharedPreferences "modelName" when the main screen uses Parakeet (no .tflite file). */
+    /** Stored under [com.whispertflite.asr.WhisperModelSelection.PREFS_KEY_MAIN_SCREEN] when the main screen uses Parakeet (no .tflite file). */
     const val MAIN_SCREEN_SPINNER_SENTINEL = "parakeet.streaming.screen"
 }

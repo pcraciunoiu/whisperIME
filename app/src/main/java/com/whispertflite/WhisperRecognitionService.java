@@ -25,11 +25,13 @@ import androidx.core.content.ContextCompat;
 import androidx.preference.PreferenceManager;
 
 import com.github.houbb.opencc4j.util.ZhConverterUtil;
+import com.whispertflite.asr.LiveTranscribePreferences;
 import com.whispertflite.asr.OfflineAsrEngines;
 import com.whispertflite.asr.Recorder;
 import com.whispertflite.asr.SpeechRecognizerBundles;
 import com.whispertflite.asr.Whisper;
 import com.whispertflite.asr.WhisperLivePreviewLoop;
+import com.whispertflite.asr.WhisperModelSelection;
 import com.whispertflite.asr.WhisperResult;
 import com.whispertflite.moonshine.MoonshineHoldRecorder;
 import com.whispertflite.moonshine.MoonshinePreferences;
@@ -73,10 +75,10 @@ public class WhisperRecognitionService extends RecognitionService {
         checkRecordPermission(callback);
 
         sdcardDataFolder = this.getExternalFilesDir(null);
-        selectedTfliteFile = new File(sdcardDataFolder, sp.getString("recognitionServiceModelName", MULTI_LINGUAL_TOP_WORLD_SLOW));
+        selectedTfliteFile = WhisperModelSelection.tfliteFileForRecognitionService(sdcardDataFolder, sp, MULTI_LINGUAL_TOP_WORLD_SLOW);
 
         if (OfflineAsrEngines.moonshineSelectedAndReady(this)) {
-            boolean moonshineLivePartials = sp.getBoolean("liveTranscribePartials", false);
+            boolean moonshineLivePartials = LiveTranscribePreferences.isEnabled(sp);
             Log.i(TAG, "onStartListening: engine=moonshine livePartials=" + moonshineLivePartials);
             Handler mainHandler = new Handler(Looper.getMainLooper());
             moonshineRecognitionRecorder = new MoonshineHoldRecorder(this, mainHandler,
@@ -108,7 +110,7 @@ public class WhisperRecognitionService extends RecognitionService {
         }
 
         if (OfflineAsrEngines.parakeetSelectedAndReady(this, sdcardDataFolder)) {
-            boolean livePartials = sp.getBoolean("liveTranscribePartials", false);
+            boolean livePartials = LiveTranscribePreferences.isEnabled(sp);
             Log.i(TAG, "onStartListening: engine=parakeet livePartials=" + livePartials
                     + " modelsDir=" + (sdcardDataFolder != null));
             Handler mainHandler = new Handler(Looper.getMainLooper());
@@ -154,7 +156,7 @@ public class WhisperRecognitionService extends RecognitionService {
             }
         } else {
             initModel(selectedTfliteFile, callback, langToken);
-            recognitionWhisperLivePartials = sp.getBoolean("liveTranscribePartials", false);
+            recognitionWhisperLivePartials = LiveTranscribePreferences.isEnabled(sp);
 
             mRecorder = new Recorder(this);
             mRecorder.setListener(message -> {

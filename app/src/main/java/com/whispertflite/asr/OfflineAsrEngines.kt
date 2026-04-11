@@ -10,6 +10,9 @@ import java.io.File
  * "Preference **and** models present" — used where the app should pick an engine only when runnable
  * (e.g. [com.whispertflite.WhisperRecognitionService], overlay activity, IME routing).
  *
+ * **Maintenance order:** align behavior with [com.whispertflite.WhisperRecognitionService] first (system
+ * voice input), then standalone UI and IME — see `docs/asr-session-architecture.md` in the repo.
+ *
  * Surfaces that must honor **preference even when files are missing** (toast + download flow) should
  * branch on [com.whispertflite.AsrEnginePreferences.mainEngine] and validate separately
  * (e.g. MainActivity `ensureEngineModelsReady`).

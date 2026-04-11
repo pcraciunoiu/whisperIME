@@ -8,9 +8,9 @@ Choose one of three engines (same choice applies across IME, standalone, and voi
 
 | Engine | Notes |
 |--------|--------|
-| **Whisper** (TFLite) | Multilingual models; in the standalone app you can **translate** recognized speech to English. |
-| **Parakeet** (ONNX) | English; supports **live** partial transcripts while you hold the button. |
-| **Moonshine Base** | English on-device model; supports **live** streaming partials while you hold. |
+| **Whisper** (TFLite) | Multilingual models; in the standalone app you can **translate** recognized speech to English. With **Transcribe live**, partial text updates while you hold (throttled on-device decode). |
+| **Parakeet** (ONNX) | English; **live** streaming partial transcripts while you hold the button. |
+| **Moonshine Base** | English on-device model; **live** streaming partials while you hold. |
 
 On first use, the app **downloads** the models for the engine you pick (Whisper from Hugging Face is a large download). Internet is required for downloads; after that, recognition runs on the device.
 
@@ -24,7 +24,7 @@ Pick Whisper, Parakeet, or Moonshine; download progress appears when models are 
 
 **Options and voice commands**
 
-Use **Append** to keep adding text across recordings, **Transcribe live** for partial results while holding the button (Moonshine / Parakeet), and **Translate to English** with Whisper in the standalone app. Configure comma-separated phrases for **Undo last voice edit** (reverts recent voice-driven text, with sentence fallback) and **New line**.
+Use **Append** to keep adding text across recordings, **Transcribe live** for partial results while holding the button (all three engines; Whisper uses periodic on-device previews), and **Translate to English** with Whisper in the standalone app. Configure comma-separated phrases for **Undo last voice edit** (reverts recent voice-driven text, with sentence fallback) and **New line**.
 
 <img src="docs/readme/settings-features.png" width="320" alt="Main screen with append, live transcribe, translate, and voice command phrase fields"/>
 

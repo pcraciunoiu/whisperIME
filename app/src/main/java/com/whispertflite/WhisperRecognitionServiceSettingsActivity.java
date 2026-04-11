@@ -25,6 +25,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
 import androidx.preference.PreferenceManager;
 
+import com.whispertflite.asr.WhisperModelSelection;
 import com.whispertflite.utils.Downloader;
 import com.whispertflite.utils.LanguagePairAdapter;
 import com.whispertflite.utils.ThemeUtils;
@@ -93,7 +94,7 @@ public class WhisperRecognitionServiceSettingsActivity extends AppCompatActivity
 
         ArrayList<File> tfliteFiles = getFilesWithExtension(sdcardDataFolder, ".tflite");
 
-        selectedTfliteFile = new File(sdcardDataFolder, sp.getString("recognitionServiceModelName", MULTI_LINGUAL_TOP_WORLD_SLOW));
+        selectedTfliteFile = WhisperModelSelection.tfliteFileForRecognitionService(sdcardDataFolder, sp, MULTI_LINGUAL_TOP_WORLD_SLOW);
         ArrayAdapter<File> tfliteAdapter = getFileArrayAdapter(tfliteFiles);
         int position = tfliteAdapter.getPosition(selectedTfliteFile);
         spinnerTflite = findViewById(R.id.spnrTfliteFiles);
@@ -112,7 +113,7 @@ public class WhisperRecognitionServiceSettingsActivity extends AppCompatActivity
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
                 selectedTfliteFile = (File) parent.getItemAtPosition(position);
                 SharedPreferences.Editor editor = sp.edit();
-                editor.putString("recognitionServiceModelName",selectedTfliteFile.getName());
+                editor.putString(WhisperModelSelection.PREFS_KEY_RECOGNITION_SERVICE, selectedTfliteFile.getName());
                 editor.apply();
                 if (selectedTfliteFile.getName().equals(MULTI_LINGUAL_EU_MODEL_FAST) || selectedTfliteFile.getName().equals(MULTI_LINGUAL_TOP_WORLD_FAST) || selectedTfliteFile.getName().equals(MULTI_LINGUAL_TOP_WORLD_SLOW)){
                     spinnerLanguage.setEnabled(true);

@@ -4,13 +4,15 @@
 
 **Constraint for SpeechToText (whisperIME):** transcription must run **fully offline** (no cloud STT). Optional ML Kit or other network features are out of scope for *this* document.
 
+**Where to integrate first:** [asr-session-architecture.md](asr-session-architecture.md) (RecognitionService-first).
+
 ---
 
 ## What this app ships today
 
 | Engine | Runtime / assets | English | Notes |
 |--------|------------------|---------|--------|
-| **Whisper** | TFLite ([DocWolle / whisper_tflite_models](https://huggingface.co/DocWolle/whisper_tflite_models)) | Yes (`.en` models) + multilingual | Main path: [`WhisperEngineJava`](../app/src/main/java/com/whispertflite/engine/WhisperEngineJava.java); model names in [`MainActivity`](../app/src/main/java/com/whispertflite/MainActivity.java). |
+| **Whisper** | TFLite ([DocWolle / whisper_tflite_models](https://huggingface.co/DocWolle/whisper_tflite_models)) | Yes (`.en` models) + multilingual | Main path: [`WhisperEngineJava`](../app/src/main/java/com/whispertflite/engine/WhisperEngineJava.java); optional **live** partials via [`WhisperLivePreviewLoop`](../app/src/main/java/com/whispertflite/asr/WhisperLivePreviewLoop.java). Model basename prefs: [`WhisperModelSelection`](../app/src/main/java/com/whispertflite/asr/WhisperModelSelection.kt) (main vs RecognitionService). |
 | **Parakeet** | ONNX + Microsoft ORT | English (streaming) | [`ParakeetStreamingEngine`](../app/src/main/java/com/whispertflite/parakeet/ParakeetStreamingEngine.kt); downloads from [smcleod HF](https://huggingface.co/smcleod/multitalker-parakeet-streaming-0.6b-v1-onnx-int8) per [`ParakeetConstants`](../app/src/main/java/com/whispertflite/parakeet/ParakeetConstants.kt). |
 | **Moonshine Base** | `moonshine-voice` AAR + ORT | English | [`MoonshineHoldRecorder`](../app/src/main/java/com/whispertflite/moonshine/MoonshineHoldRecorder.kt); shares native `libonnxruntime.so` with Parakeet—see [`app/build.gradle`](../app/build.gradle). |
 
@@ -58,10 +60,10 @@ See [parakeet-onnxruntime.md](parakeet-onnxruntime.md) — duplicate `libonnxrun
 
 ## Decisions (for `offline-agents-feature-list` todo)
 
-Fill in as the team converges:
+- [x] Keep README/engine picker to **Whisper + Parakeet + Moonshine** only for now.
+- [x] Reference benchmark app (android-offline-transcribe) documented above under **Reference project**.
+- [ ] Optional spike: sherpa-onnx Zipformer or Whisper-small vs current TFLite (size/latency/WER).
 
-- [ ] Keep README/engine picker to **Whisper + Parakeet + Moonshine** only for now.
-- [ ] Mention sherpa-onnx / reference repo under “Related / research” (optional).
-- [ ] Plan a spike: sherpa-onnx Zipformer or Whisper-small vs current TFLite (size/latency/WER).
+**Integration priority:** see [asr-session-architecture.md](asr-session-architecture.md) (RecognitionService-first; IME secondary).
 
 **Last updated:** 2026-04-10

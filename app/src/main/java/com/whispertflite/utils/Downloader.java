@@ -11,6 +11,7 @@ import android.widget.Toast;
 import androidx.preference.PreferenceManager;
 
 import com.whispertflite.R;
+import com.whispertflite.asr.WhisperModelSelection;
 import com.whispertflite.databinding.ActivityDownloadBinding;
 
 import java.io.BufferedInputStream;
@@ -139,8 +140,8 @@ public class Downloader {
         File modelMultiLingualSmallOLDFile = new File(activity.getExternalFilesDir(null) + "/" + modelMultiLingualSmallOLD);
         if (modelMultiLingualSmallOLDFile.exists()) modelMultiLingualSmallOLDFile.delete();
         SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(activity);
-        sp.edit().remove("modelName").apply();
-        sp.edit().remove("recognitionServiceModelName").apply();
+        sp.edit().remove(WhisperModelSelection.PREFS_KEY_MAIN_SCREEN).apply();
+        sp.edit().remove(WhisperModelSelection.PREFS_KEY_RECOGNITION_SERVICE).apply();
     }
 
     public static void downloadModels(final Activity activity, ActivityDownloadBinding binding) {

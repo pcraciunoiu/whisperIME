@@ -30,9 +30,11 @@ import androidx.core.content.ContextCompat;
 import androidx.preference.PreferenceManager;
 
 import com.github.houbb.opencc4j.util.ZhConverterUtil;
+import com.whispertflite.asr.LiveTranscribePreferences;
 import com.whispertflite.asr.OfflineAsrEngines;
 import com.whispertflite.asr.Recorder;
 import com.whispertflite.asr.Whisper;
+import com.whispertflite.asr.WhisperModelSelection;
 import com.whispertflite.asr.WhisperResult;
 import com.whispertflite.moonshine.MoonshineHoldRecorder;
 import com.whispertflite.moonshine.MoonshinePreferences;
@@ -72,7 +74,7 @@ public class WhisperRecognizeActivity extends AppCompatActivity {
         sp = PreferenceManager.getDefaultSharedPreferences(this);
         MoonshinePreferences.migrateFromParakeetKeys(this);
         sdcardDataFolder = this.getExternalFilesDir(null);
-        selectedTfliteFile = new File(sdcardDataFolder, sp.getString("modelName", MULTI_LINGUAL_TOP_WORLD_SLOW));
+        selectedTfliteFile = WhisperModelSelection.tfliteFileForMainScreen(sdcardDataFolder, sp, MULTI_LINGUAL_TOP_WORLD_SLOW);
         moonshineOverlayMode = OfflineAsrEngines.moonshineSelectedAndReady(mContext);
         parakeetOverlayMode = OfflineAsrEngines.parakeetSelectedAndReady(mContext, sdcardDataFolder);
         if (!moonshineOverlayMode && !parakeetOverlayMode && !selectedTfliteFile.exists()) {
@@ -210,7 +212,7 @@ public class WhisperRecognizeActivity extends AppCompatActivity {
                     runOnUiThread(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background_pressed));
                     if (checkRecordPermission()) {
                         HapticFeedback.vibrate(this);
-                        boolean moonshineLive = sp.getBoolean("liveTranscribePartials", false);
+                        boolean moonshineLive = LiveTranscribePreferences.isEnabled(sp);
                         moonshineOverlayRecorder = new MoonshineHoldRecorder(mContext, mainHandler,
                                 partial -> { /* overlay has no live text field */ }, moonshineLive);
                         if (!moonshineOverlayRecorder.start()) {

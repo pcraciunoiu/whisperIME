@@ -43,9 +43,11 @@ import androidx.core.content.ContextCompat;
 
 import com.github.houbb.opencc4j.util.ZhConverterUtil;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
+import com.whispertflite.asr.LiveTranscribePreferences;
 import com.whispertflite.asr.Recorder;
 import com.whispertflite.asr.Whisper;
 import com.whispertflite.asr.WhisperLivePreviewLoop;
+import com.whispertflite.asr.WhisperModelSelection;
 import com.whispertflite.asr.WhisperResult;
 import com.whispertflite.moonshine.MoonshineHoldRecorder;
 import com.whispertflite.moonshine.MoonshineModelFiles;
@@ -168,9 +170,9 @@ public class MainActivity extends AppCompatActivity {
         MoonshinePreferences.migrateFromParakeetKeys(this);
         append = findViewById(R.id.mode_append);
         liveTranscribe = findViewById(R.id.mode_live_transcribe);
-        liveTranscribe.setChecked(sp.getBoolean("liveTranscribePartials", false));
+        liveTranscribe.setChecked(LiveTranscribePreferences.isEnabled(sp));
         liveTranscribe.setOnCheckedChangeListener((buttonView, isChecked) ->
-                sp.edit().putBoolean("liveTranscribePartials", isChecked).apply());
+                sp.edit().putBoolean(LiveTranscribePreferences.PREFS_KEY, isChecked).apply());
 
         etVoiceUndoPhrases = findViewById(R.id.et_voice_undo_phrases);
         etVoiceNewlinePhrases = findViewById(R.id.et_voice_newline_phrases);
@@ -288,7 +290,7 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        selectedTfliteFile = new File(sdcardDataFolder, sp.getString("modelName", MULTI_LINGUAL_TOP_WORLD_SLOW));
+        selectedTfliteFile = WhisperModelSelection.tfliteFileForMainScreen(sdcardDataFolder, sp, MULTI_LINGUAL_TOP_WORLD_SLOW);
         ArrayAdapter<File> tfliteAdapter = getFileArrayAdapter(tfliteFiles);
         int position = tfliteAdapter.getPosition(selectedTfliteFile);
         spinnerTflite = findViewById(R.id.spnrTfliteFiles);
@@ -300,7 +302,7 @@ public class MainActivity extends AppCompatActivity {
             spinnerTflite.setSelection(position >= 0 ? position : 0, false);
             if (position < 0) {
                 selectedTfliteFile = tfliteAdapter.getItem(0);
-                sp.edit().putString("modelName", selectedTfliteFile.getName()).apply();
+                sp.edit().putString(WhisperModelSelection.PREFS_KEY_MAIN_SCREEN, selectedTfliteFile.getName()).apply();
             }
         }
         applyLanguageSpinnerForModelChoice(languagePairAdapter);
@@ -309,7 +311,7 @@ public class MainActivity extends AppCompatActivity {
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
                 selectedTfliteFile = (File) parent.getItemAtPosition(position);
                 SharedPreferences.Editor editor = sp.edit();
-                editor.putString("modelName",selectedTfliteFile.getName());
+                editor.putString(WhisperModelSelection.PREFS_KEY_MAIN_SCREEN, selectedTfliteFile.getName());
                 editor.apply();
                 if (AsrEnginePreferences.WHISPER.equals(AsrEnginePreferences.mainEngine(MainActivity.this))) {
                     initModel();
@@ -819,7 +821,7 @@ public class MainActivity extends AppCompatActivity {
             deinitModel();
             return;
         }
-        File modelFile = new File(sdcardDataFolder, sp.getString("modelName", MULTI_LINGUAL_TOP_WORLD_SLOW));
+        File modelFile = WhisperModelSelection.tfliteFileForMainScreen(sdcardDataFolder, sp, MULTI_LINGUAL_TOP_WORLD_SLOW);
         boolean isMultilingualModel = !(modelFile.getName().endsWith(ENGLISH_ONLY_MODEL_EXTENSION));
         String vocabFileName = isMultilingualModel ? MULTILINGUAL_VOCAB_FILE : ENGLISH_ONLY_VOCAB_FILE;
         File vocabFile = new File(sdcardDataFolder, vocabFileName);
@@ -921,9 +923,9 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void maybeMigrateModelNameFromSentinel() {
-        String mn = sp.getString("modelName", MULTI_LINGUAL_TOP_WORLD_SLOW);
+        String mn = WhisperModelSelection.mainScreenModelBasename(sp, MULTI_LINGUAL_TOP_WORLD_SLOW);
         if (mn.contains("parakeet.streaming") || mn.contains("moonshine")) {
-            sp.edit().putString("modelName", MULTI_LINGUAL_TOP_WORLD_SLOW).apply();
+            sp.edit().putString(WhisperModelSelection.PREFS_KEY_MAIN_SCREEN, MULTI_LINGUAL_TOP_WORLD_SLOW).apply();
         }
     }
 

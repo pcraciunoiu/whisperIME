@@ -32,9 +32,11 @@ import androidx.core.content.ContextCompat;
 
 import com.github.houbb.opencc4j.util.ZhConverterUtil;
 import com.whispertflite.asr.OfflineAsrEngines;
+import com.whispertflite.asr.LiveTranscribePreferences;
 import com.whispertflite.asr.Recorder;
 import com.whispertflite.asr.Whisper;
 import com.whispertflite.asr.WhisperLivePreviewLoop;
+import com.whispertflite.asr.WhisperModelSelection;
 import com.whispertflite.asr.WhisperResult;
 import com.whispertflite.moonshine.MoonshineHoldRecorder;
 import com.whispertflite.moonshine.MoonshineModelFiles;
@@ -131,7 +133,7 @@ public class WhisperInputMethodService extends InputMethodService {
     @Override
     public void onStartInputView(EditorInfo attribute, boolean restarting){
         MoonshinePreferences.migrateFromParakeetKeys(this);
-        selectedTfliteFile = new File(sdcardDataFolder, sp.getString("modelName", MULTI_LINGUAL_TOP_WORLD_SLOW));
+        selectedTfliteFile = WhisperModelSelection.tfliteFileForMainScreen(sdcardDataFolder, sp, MULTI_LINGUAL_TOP_WORLD_SLOW);
         String eng = AsrEnginePreferences.mainEngine(this);
 
         if (AsrEnginePreferences.MOONSHINE.equals(eng)) {
@@ -193,7 +195,7 @@ public class WhisperInputMethodService extends InputMethodService {
         tvStatus = view.findViewById(R.id.tv_status);
         sdcardDataFolder = this.getExternalFilesDir(null);
         MoonshinePreferences.migrateFromParakeetKeys(this);
-        selectedTfliteFile = new File(sdcardDataFolder, sp.getString("modelName", MULTI_LINGUAL_TOP_WORLD_SLOW));
+        selectedTfliteFile = WhisperModelSelection.tfliteFileForMainScreen(sdcardDataFolder, sp, MULTI_LINGUAL_TOP_WORLD_SLOW);
         if (AsrEnginePreferences.WHISPER.equals(AsrEnginePreferences.mainEngine(this))
                 && selectedTfliteFile.isFile() && mWhisper == null) {
             initModel(selectedTfliteFile);
@@ -211,7 +213,7 @@ public class WhisperInputMethodService extends InputMethodService {
             public void onUpdateReceived(String message) {
                 if (message.equals(Recorder.MSG_RECORDING)) {
                     handler.post(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background_pressed));
-                    boolean livePref = sp.getBoolean("liveTranscribePartials", false);
+                    boolean livePref = LiveTranscribePreferences.isEnabled(sp);
                     if (livePref && AsrEnginePreferences.WHISPER.equals(AsrEnginePreferences.mainEngine(WhisperInputMethodService.this))
                             && mWhisper != null) {
                         imeWhisperHadLivePartials = true;
@@ -308,7 +310,7 @@ public class WhisperInputMethodService extends InputMethodService {
         });
 
         btnRecord.setOnTouchListener((v, event) -> {
-            boolean liveImePartials = sp.getBoolean("liveTranscribePartials", false);
+            boolean liveImePartials = LiveTranscribePreferences.isEnabled(sp);
             if (useMoonshineImeNow()) {
                 if (event.getAction() == MotionEvent.ACTION_DOWN) {
                     imeVoiceCommandConsumed = false;
