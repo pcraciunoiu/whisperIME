@@ -22,12 +22,12 @@ target_include_directories(rnnoise PUBLIC
     ${RNNOISE_ROOT}/src
 )
 
-# Scalar vec.h path only: vec_neon.h sgemv omits RNN_CLEAR on outputs and has caused crashes on arm64
-# (FORTIFY memcpy abort in rnn_compute_generic_conv1d). See tmp/logcat.txt.
+# Do NOT define USE_WEIGHTS_FILE: upstream uses #ifndef USE_WEIGHTS_FILE for embedded weights
+# (rnnoise_arrays + init_rnnoise). Defining USE_WEIGHTS_FILE=0 still defines the macro and skips
+# that path, leaving the model uninitialized. NEON stays enabled (vec.h); the prior crash was
+# that init bug, not DISABLE_NEON.
 target_compile_definitions(rnnoise PRIVATE
     FLOATING_POINT=1
-    USE_WEIGHTS_FILE=0
-    DISABLE_NEON
 )
 
 find_library(log_lib log)
