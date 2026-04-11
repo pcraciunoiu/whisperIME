@@ -17,6 +17,8 @@ import com.whispertflite.parakeet.ParakeetDownloader
 import com.whispertflite.parakeet.ParakeetEnginePool
 import com.whispertflite.parakeet.ParakeetModelFiles
 import com.whispertflite.parakeet.ParakeetPreferences
+import com.whispertflite.sherpa.SherpaModelFiles
+import com.whispertflite.sherpa.SherpaPreferences
 import com.whispertflite.utils.Downloader
 import com.whispertflite.utils.ThemeUtils
 
@@ -85,6 +87,7 @@ class DownloadActivity : AppCompatActivity() {
             when (engine) {
                 AsrEnginePreferences.PARAKEET -> R.string.download_model_text_parakeet
                 AsrEnginePreferences.MOONSHINE -> R.string.download_model_text_moonshine
+                AsrEnginePreferences.SHERPA -> R.string.download_model_text_sherpa
                 else -> R.string.download_model_text
             },
         )
@@ -107,6 +110,16 @@ class DownloadActivity : AppCompatActivity() {
                 val dir = getExternalFilesDir(null)
                 if (dir != null && ParakeetModelFiles.allOnnxPresent(dir)) {
                     AsrEnginePreferences.setMainEngine(this, AsrEnginePreferences.PARAKEET)
+                    showReadyAndGoMain()
+                }
+            }
+            AsrEnginePreferences.SHERPA -> {
+                val dir = getExternalFilesDir(null)
+                if (dir != null && SherpaModelFiles.allFilesPresentForSelectedVariant(dir, this)) {
+                    PreferenceManager.getDefaultSharedPreferences(this).edit()
+                        .putBoolean(SherpaPreferences.KEY_USE_SHERPA_MAIN, true)
+                        .apply()
+                    AsrEnginePreferences.setMainEngine(this, AsrEnginePreferences.SHERPA)
                     showReadyAndGoMain()
                 }
             }
@@ -159,6 +172,16 @@ class DownloadActivity : AppCompatActivity() {
                         binding?.buttonStart?.visibility = View.VISIBLE
                     },
                 )
+            }
+            AsrEnginePreferences.SHERPA -> {
+                binding?.buttonUpdate?.visibility = View.GONE
+                android.widget.Toast.makeText(
+                    this,
+                    R.string.download_model_text_sherpa,
+                    android.widget.Toast.LENGTH_LONG,
+                ).show()
+                binding?.downloadProgress?.progress = 100
+                binding?.buttonStart?.visibility = View.VISIBLE
             }
             AsrEnginePreferences.PARAKEET -> {
                 binding?.buttonUpdate?.visibility = View.GONE
