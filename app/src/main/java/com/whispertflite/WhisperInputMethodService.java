@@ -23,6 +23,7 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
+import android.widget.CheckBox;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
@@ -45,6 +46,7 @@ import com.whispertflite.parakeet.ParakeetEnginePool;
 import com.whispertflite.parakeet.ParakeetModelFiles;
 import com.whispertflite.parakeet.ParakeetStreamingRecorder;
 import com.whispertflite.sherpa.SherpaModelFiles;
+import com.whispertflite.sherpa.SherpaPreferences;
 import com.whispertflite.sherpa.SherpaStreamingRecorder;
 import com.whispertflite.utils.HapticFeedback;
 import com.whispertflite.utils.InputLang;
@@ -75,6 +77,8 @@ public class WhisperInputMethodService extends InputMethodService {
     private static boolean translate = false;
     private boolean modeAuto = false;
     private LinearLayout layoutButtons;
+    private LinearLayout layoutSherpaImeOptions;
+    private CheckBox cbSherpaPunctIme;
     private MoonshineHoldRecorder imeMoonshineRecorder = null;
     private ParakeetStreamingRecorder imeParakeetRecorder = null;
     private SherpaStreamingRecorder imeSherpaRecorder = null;
@@ -149,6 +153,7 @@ public class WhisperInputMethodService extends InputMethodService {
 
     @Override
     public void onStartInputView(EditorInfo attribute, boolean restarting){
+        updateSherpaImeOptionsVisibility();
         MoonshinePreferences.migrateFromParakeetKeys(this);
         selectedTfliteFile = WhisperModelSelection.tfliteFileForMainScreen(sdcardDataFolder, sp, MULTI_LINGUAL_TOP_WORLD_SLOW);
         String eng = AsrEnginePreferences.mainEngine(this);
@@ -235,6 +240,14 @@ public class WhisperInputMethodService extends InputMethodService {
         modeAuto = sp.getBoolean("imeModeAuto",false);
         btnModeAuto.setImageResource(modeAuto ? R.drawable.ic_auto_on_36dp : R.drawable.ic_auto_off_36dp);
         layoutButtons = view.findViewById(R.id.layout_buttons);
+        layoutSherpaImeOptions = view.findViewById(R.id.layout_sherpa_ime_options);
+        cbSherpaPunctIme = view.findViewById(R.id.cbSherpaPunctIme);
+        if (cbSherpaPunctIme != null) {
+            cbSherpaPunctIme.setChecked(SherpaPreferences.isPunctuationEnhanceEnabled(this));
+            cbSherpaPunctIme.setOnCheckedChangeListener((buttonView, isChecked) ->
+                    SherpaPreferences.setPunctuationEnhanceEnabled(WhisperInputMethodService.this, isChecked));
+        }
+        updateSherpaImeOptionsVisibility();
         checkRecordPermission();
 
         // Audio recording functionality
@@ -586,6 +599,12 @@ public class WhisperInputMethodService extends InputMethodService {
         return view;
     }
 
+    private void updateSherpaImeOptionsVisibility() {
+        if (layoutSherpaImeOptions == null) return;
+        boolean show = AsrEnginePreferences.SHERPA.equals(AsrEnginePreferences.mainEngine(this));
+        layoutSherpaImeOptions.setVisibility(show ? View.VISIBLE : View.GONE);
+    }
+
     private void startRecording() {
         if (modeAuto) mRecorder.initVad();
         mRecorder.start();
@@ -710,6 +729,9 @@ public class WhisperInputMethodService extends InputMethodService {
      */
     private void applyLiveImePartial(String partial, boolean liveImePartials) {
         if (!liveImePartials) return;
+        if (partial == null || partial.isEmpty()) {
+            return;
+        }
         InputConnection ic = getCurrentInputConnection();
         if (ic == null) {
             Log.d(TAG, "scratch/live partial: InputConnection null (field may have lost focus)");

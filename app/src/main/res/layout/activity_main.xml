@@ -366,13 +366,5 @@
                 android:contentDescription="@string/info"
                 android:src="@drawable/ic_info_48dp" />
         </RelativeLayout>
-
-        <Button
-            android:id="@+id/btnSherpaSpikeDebug"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:visibility="gone"
-            android:text="@string/sherpa_spike_debug_entry" />
     </LinearLayout>
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

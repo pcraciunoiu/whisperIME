@@ -17,6 +17,21 @@
         android:indeterminateTint="@color/colorAccent"
         style="?android:attr/progressBarStyleHorizontal"/>
 
+    <LinearLayout
+        android:id="@+id/layout_sherpa_ime_options"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:visibility="gone">
+
+        <CheckBox
+            android:id="@+id/cbSherpaPunctIme"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/sherpa_punct_enhance_checkbox"
+            android:textSize="14sp" />
+    </LinearLayout>
+
     <RelativeLayout
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"

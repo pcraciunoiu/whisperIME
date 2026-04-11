@@ -55,7 +55,6 @@ import com.whispertflite.moonshine.MoonshineModelFiles;
 import com.whispertflite.moonshine.MoonshinePocActivity;
 import com.whispertflite.moonshine.MoonshinePreferences;
 import com.whispertflite.sherpa.SherpaCatalogEntry;
-import com.whispertflite.sherpa.SherpaOnnxSpikeActivity;
 import com.whispertflite.sherpa.SherpaPreferences;
 import com.whispertflite.sherpa.SherpaStreamingRecorder;
 import com.whispertflite.parakeet.ParakeetEnginePool;
@@ -119,6 +118,7 @@ public class MainActivity extends AppCompatActivity {
     private File selectedTfliteFile = null;
     private SharedPreferences sp = null;
     private Spinner spnrAsrEngine;
+    private String[] mAsrEngineValues;
     private LinearLayout layoutWhisperModels;
     private LinearLayout layoutSherpaModels;
     private LinearLayout layoutSherpaOptions;
@@ -162,6 +162,20 @@ public class MainActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
         refreshWhisperTfliteSpinner();
+        syncAsrEngineSpinnerToPrefs();
+    }
+
+    private void syncAsrEngineSpinnerToPrefs() {
+        if (spnrAsrEngine == null || mAsrEngineValues == null) {
+            return;
+        }
+        String cur = AsrEnginePreferences.mainEngine(this);
+        for (int i = 0; i < mAsrEngineValues.length; i++) {
+            if (mAsrEngineValues[i].equals(cur)) {
+                spnrAsrEngine.setSelection(i, false);
+                break;
+            }
+        }
     }
 
     @Override
@@ -252,11 +266,11 @@ public class MainActivity extends AppCompatActivity {
                 R.array.asr_engine_entries, android.R.layout.simple_spinner_item);
         engineAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         spnrAsrEngine.setAdapter(engineAdapter);
-        String[] engineValues = getResources().getStringArray(R.array.asr_engine_entry_values);
+        mAsrEngineValues = getResources().getStringArray(R.array.asr_engine_entry_values);
         String currentEngine = AsrEnginePreferences.mainEngine(this);
         int engineSel = 0;
-        for (int i = 0; i < engineValues.length; i++) {
-            if (engineValues[i].equals(currentEngine)) {
+        for (int i = 0; i < mAsrEngineValues.length; i++) {
+            if (mAsrEngineValues[i].equals(currentEngine)) {
                 engineSel = i;
                 break;
             }
@@ -271,13 +285,13 @@ public class MainActivity extends AppCompatActivity {
         } else {
             deinitModel();
         }
-        applyEngineUiMode(engineValues[engineSel]);
+        applyEngineUiMode(mAsrEngineValues[engineSel]);
         maybePreheatParakeet();
 
         spnrAsrEngine.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                String eng = engineValues[position];
+                String eng = mAsrEngineValues[position];
                 AsrEnginePreferences.setMainEngine(MainActivity.this, eng);
                 if (AsrEnginePreferences.WHISPER.equals(eng)) {
                     initModel();
@@ -299,13 +313,6 @@ public class MainActivity extends AppCompatActivity {
             startActivity(new Intent(this, MoonshinePocActivity.class));
             return true;
         });
-
-        View btnSherpaSpikeDebug = findViewById(R.id.btnSherpaSpikeDebug);
-        if (BuildConfig.DEBUG) {
-            btnSherpaSpikeDebug.setVisibility(View.VISIBLE);
-            btnSherpaSpikeDebug.setOnClickListener(v ->
-                    startActivity(new Intent(this, SherpaOnnxSpikeActivity.class)));
-        }
 
         spinnerLanguage = findViewById(R.id.spnrLanguage);
         List<Pair<String, String>> languagePairs = LanguagePairAdapter.getLanguagePairs(this);
@@ -466,11 +473,14 @@ public class MainActivity extends AppCompatActivity {
                             partial -> {
                                 if (live) {
                                     runOnUiThread(() -> {
+                                        if (partial == null || partial.isEmpty()) {
+                                            return;
+                                        }
                                         if (handleLivePartialVoiceCommand(partial, liveAppendPrefix)) return;
                                         if (liveAppendPrefix != null) {
                                             tvResult.setText(joinLivePrefixWithPartial(liveAppendPrefix, partial));
                                         } else {
-                                            tvResult.setText(partial != null ? partial : "");
+                                            tvResult.setText(partial);
                                         }
                                         moveCursorToEnd(tvResult);
                                     });
