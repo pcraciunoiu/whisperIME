@@ -29,6 +29,7 @@ import com.whispertflite.asr.OfflineAsrEngines;
 import com.whispertflite.asr.Recorder;
 import com.whispertflite.asr.SpeechRecognizerBundles;
 import com.whispertflite.asr.Whisper;
+import com.whispertflite.asr.WhisperLivePreviewLoop;
 import com.whispertflite.asr.WhisperResult;
 import com.whispertflite.moonshine.MoonshineHoldRecorder;
 import com.whispertflite.moonshine.MoonshinePreferences;
@@ -40,8 +41,11 @@ import java.io.File;
 
 public class WhisperRecognitionService extends RecognitionService {
     private static final String TAG = "WhisperRecognitionService";
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private Recorder mRecorder = null;
     private Whisper mWhisper = null;
+    private WhisperLivePreviewLoop whisperRsLiveLoop = null;
+    private boolean recognitionWhisperLivePartials = false;
     private File sdcardDataFolder = null;
     private File selectedTfliteFile = null;
     private boolean recognitionCancelled = false;
@@ -150,6 +154,7 @@ public class WhisperRecognitionService extends RecognitionService {
             }
         } else {
             initModel(selectedTfliteFile, callback, langToken);
+            recognitionWhisperLivePartials = sp.getBoolean("liveTranscribePartials", false);
 
             mRecorder = new Recorder(this);
             mRecorder.setListener(message -> {
@@ -159,7 +164,24 @@ public class WhisperRecognitionService extends RecognitionService {
                     } catch (RemoteException e) {
                         throw new RuntimeException(e);
                     }
+                    if (recognitionWhisperLivePartials && mWhisper != null) {
+                        stopWhisperRsLiveLoop();
+                        whisperRsLiveLoop = new WhisperLivePreviewLoop(mainHandler, mRecorder, mWhisper,
+                                partial -> {
+                                    if (partial == null) {
+                                        return;
+                                    }
+                                    try {
+                                        callback.partialResults(
+                                                SpeechRecognizerBundles.resultsRecognitionSingle(partial));
+                                    } catch (RemoteException e) {
+                                        throw new RuntimeException(e);
+                                    }
+                                });
+                        whisperRsLiveLoop.start();
+                    }
                 } else if (message.equals(Recorder.MSG_RECORDING_DONE)) {
+                    stopWhisperRsLiveLoop();
                     HapticFeedback.vibrate(this);
                     try {
                         callback.rmsChanged(-20.0f);
@@ -168,6 +190,7 @@ public class WhisperRecognitionService extends RecognitionService {
                     }
                     startTranscription();
                 } else if (message.equals(Recorder.MSG_RECORDING_ERROR)) {
+                    stopWhisperRsLiveLoop();
                     try {
                         callback.error(ERROR_CLIENT);
                     } catch (RemoteException e) {
@@ -195,9 +218,17 @@ public class WhisperRecognitionService extends RecognitionService {
         }
     }
 
+    private void stopWhisperRsLiveLoop() {
+        if (whisperRsLiveLoop != null) {
+            whisperRsLiveLoop.stop();
+            whisperRsLiveLoop = null;
+        }
+    }
+
     @Override
     protected void onCancel(Callback callback) {
         Log.d(TAG,"cancel");
+        stopWhisperRsLiveLoop();
         if (moonshineRecognitionRecorder != null) {
             moonshineRecognitionRecorder.stop();
             moonshineRecognitionRecorder = null;
@@ -252,6 +283,7 @@ public class WhisperRecognitionService extends RecognitionService {
         mWhisper.loadModel(modelFile, vocabFile, isMultilingualModel);
         Log.d(TAG, "Initialized: " + modelFile.getName());
         mWhisper.setLanguage(langToken);
+        mWhisper.setAction(Whisper.ACTION_TRANSCRIBE);
         Log.d(TAG, "Language token " + langToken);
         mWhisper.setListener(new Whisper.WhisperListener() {
             @Override
@@ -288,8 +320,7 @@ public class WhisperRecognitionService extends RecognitionService {
 
     private void startTranscription() {
         if (!recognitionCancelled){
-            Handler handler = new Handler(Looper.getMainLooper());
-            handler.post(()-> {
+            mainHandler.post(()-> {
                 Toast toast = new Toast(this);
                 toast.setDuration(Toast.LENGTH_SHORT);
                 toast.setText(R.string.processing);

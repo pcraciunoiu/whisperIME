@@ -45,6 +45,7 @@ import com.github.houbb.opencc4j.util.ZhConverterUtil;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.whispertflite.asr.Recorder;
 import com.whispertflite.asr.Whisper;
+import com.whispertflite.asr.WhisperLivePreviewLoop;
 import com.whispertflite.asr.WhisperResult;
 import com.whispertflite.moonshine.MoonshineHoldRecorder;
 import com.whispertflite.moonshine.MoonshineModelFiles;
@@ -100,6 +101,9 @@ public class MainActivity extends AppCompatActivity {
     private Whisper mWhisper = null;
     private MoonshineHoldRecorder moonshineMainRecorder = null;
     private ParakeetStreamingRecorder parakeetMainRecorder = null;
+    private WhisperLivePreviewLoop mainWhisperLiveLoop = null;
+    /** Whisper hold used live partials for this utterance (cleared when final result is applied). */
+    private boolean whisperSessionLiveTranscribe = false;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     private File sdcardDataFolder = null;
@@ -449,6 +453,15 @@ public class MainActivity extends AppCompatActivity {
                 }
                 if (!mWhisper.isInProgress()) {
                     HapticFeedback.vibrate(this);
+                    if (AsrEnginePreferences.WHISPER.equals(AsrEnginePreferences.mainEngine(this))) {
+                        boolean wl = liveTranscribe.isChecked();
+                        String liveAppendPrefix = (wl && append.isChecked())
+                                ? tvResult.getText().toString()
+                                : null;
+                        mainLiveAppendPrefix = liveAppendPrefix;
+                        mWhisper.setAction(translate.isChecked() ? Whisper.ACTION_TRANSLATE : Whisper.ACTION_TRANSCRIBE);
+                        mWhisper.setLanguage(langToken);
+                    }
                     startRecording();
                     runOnUiThread(() -> processingBar.setProgress(100));
                     countDownTimer = new CountDownTimer(RecordingTimings.HOLD_TO_TALK_MAX_MS, 1000) {
@@ -512,13 +525,21 @@ public class MainActivity extends AppCompatActivity {
                     runOnUiThread(() -> tvStatus.setText(getString(R.string.record_button) +"…"));
                     if (!append.isChecked()) runOnUiThread(() -> tvResult.setText(""));
                     runOnUiThread(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background_pressed));
+                    boolean whisperEngine = AsrEnginePreferences.WHISPER.equals(AsrEnginePreferences.mainEngine(MainActivity.this));
+                    whisperSessionLiveTranscribe = whisperEngine && liveTranscribe.isChecked();
+                    if (whisperSessionLiveTranscribe) {
+                        startMainWhisperLivePreviewIfNeeded();
+                    }
                 } else if (message.equals(Recorder.MSG_RECORDING_DONE)) {
+                    stopMainWhisperLivePreview();
                     HapticFeedback.vibrate(mContext);
                     runOnUiThread(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background));
 
                     if (translate.isChecked()) startProcessing(Whisper.ACTION_TRANSLATE);
                     else startProcessing(Whisper.ACTION_TRANSCRIBE);
                 } else if (message.equals(Recorder.MSG_RECORDING_ERROR)) {
+                    stopMainWhisperLivePreview();
+                    whisperSessionLiveTranscribe = false;
                     HapticFeedback.vibrate(mContext);
                     if (countDownTimer!=null) { countDownTimer.cancel();}
                     runOnUiThread(() -> {
@@ -591,6 +612,79 @@ public class MainActivity extends AppCompatActivity {
             return prefix + partial;
         }
         return prefix + " " + partial;
+    }
+
+    private void startMainWhisperLivePreviewIfNeeded() {
+        if (mRecorder == null || mWhisper == null) {
+            return;
+        }
+        stopMainWhisperLivePreview();
+        mainWhisperLiveLoop = new WhisperLivePreviewLoop(mainHandler, mRecorder, mWhisper,
+                partial -> runOnUiThread(() -> {
+                    if (!liveTranscribe.isChecked()) {
+                        return;
+                    }
+                    if (handleLivePartialVoiceCommand(partial, mainLiveAppendPrefix)) {
+                        return;
+                    }
+                    if (mainLiveAppendPrefix != null) {
+                        tvResult.setText(joinLivePrefixWithPartial(mainLiveAppendPrefix, partial));
+                    } else {
+                        tvResult.setText(partial != null ? partial : "");
+                    }
+                    moveCursorToEnd(tvResult);
+                }));
+        mainWhisperLiveLoop.start();
+    }
+
+    private void stopMainWhisperLivePreview() {
+        if (mainWhisperLiveLoop != null) {
+            mainWhisperLiveLoop.stop();
+            mainWhisperLiveLoop = null;
+        }
+    }
+
+    /**
+     * Final transcript after Whisper live partials (same rules as {@link #finishMoonshineOrParakeetHold} live branch).
+     */
+    private void finishMainActivityWhisperLiveHold(String fin) {
+        Set<String> undo = VoiceCommandPreferences.normalizedUndoPhrases(sp);
+        Set<String> nl = VoiceCommandPreferences.normalizedNewlinePhrases(sp);
+        ImeTextEditHelper.VoiceCommandTail tail =
+                ImeTextEditHelper.findTrailingVoiceCommand(fin, undo, nl);
+        if (tail.hasCommand()) {
+            if (!mainVoiceCommandConsumed) {
+                String base = mainLiveAppendPrefix != null ? mainLiveAppendPrefix : "";
+                if (tail.kind == ImeTextEditHelper.VoiceCommandKind.UNDO) {
+                    if (!VoiceInputUndoStack.popToEditText(tvResult)) {
+                        ImeTextEditHelper.applySentenceUndoFallbackToEditText(tvResult);
+                    }
+                    if (!tail.prefix.isEmpty()) {
+                        appendTranscriptPrefixToEditText(tvResult, tail.prefix);
+                    }
+                    moveCursorToEnd(tvResult);
+                } else {
+                    VoiceInputUndoStack.pushFromEditText(tvResult);
+                    tvResult.setText(joinLivePrefixWithPartial(base, tail.prefix));
+                    moveCursorToEnd(tvResult);
+                    ImeTextEditHelper.applyNewLineAtEndToEditText(tvResult);
+                }
+            }
+            mainVoiceCommandConsumed = false;
+        } else if (append.isChecked() && !fin.trim().isEmpty()) {
+            CharSequence cur = tvResult.getText();
+            if (cur.length() > 0 && cur.charAt(cur.length() - 1) != ' ') {
+                tvResult.append(" ");
+            }
+            mainVoiceCommandConsumed = false;
+        } else {
+            mainVoiceCommandConsumed = false;
+            if (!fin.trim().isEmpty() && tvResult.getText().toString().trim().isEmpty()) {
+                tvResult.setText(fin);
+                moveCursorToEnd(tvResult);
+            }
+        }
+        mainLiveAppendPrefix = null;
     }
 
     /** Append mode: gap before chunk if needed, then append; caret at end. */
@@ -745,41 +839,53 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onResultReceived(WhisperResult whisperResult) {
                 long timeTaken = System.currentTimeMillis() - startTime;
-                runOnUiThread(() -> tvStatus.setText(getString(R.string.processing_done) + timeTaken + "\u2009ms" + "\n"+ getString(R.string.language) + " " + new Locale(whisperResult.getLanguage()).getDisplayLanguage() + " " + (whisperResult.getTask() == Whisper.Action.TRANSCRIBE ? getString(R.string.mode_transcription) : getString(R.string.mode_translation))));
-                runOnUiThread(() -> processingBar.setIndeterminate(false));
-                if ((whisperResult.getLanguage().equals("zh")) && (whisperResult.getTask() == Whisper.Action.TRANSCRIBE)){
-                    runOnUiThread(() -> layoutModeChinese.setVisibility(View.VISIBLE));
-                    boolean simpleChinese = sp.getBoolean("simpleChinese",false);  //convert to desired Chinese mode
-                    String result = simpleChinese ? ZhConverterUtil.toSimple(whisperResult.getResult()) : ZhConverterUtil.toTraditional(whisperResult.getResult());
-                    runOnUiThread(() -> {
-                        if (!applyVoiceCommandToResultIfMatches(result)) {
-                            VoiceInputUndoStack.pushFromEditText(tvResult);
-                            if (append.isChecked()) {
-                                appendTranscriptChunkWithGap(result);
-                            } else {
-                                tvResult.setText(result);
-                                moveCursorToEnd(tvResult);
-                            }
-                        }
-                    });
+                final boolean wasLive = whisperSessionLiveTranscribe;
+                whisperSessionLiveTranscribe = false;
+
+                boolean zh = whisperResult.getLanguage().equals("zh")
+                        && whisperResult.getTask() == Whisper.Action.TRANSCRIBE;
+                String raw = whisperResult.getResult();
+                final String textForUi;
+                if (zh) {
+                    boolean simpleChinese = sp.getBoolean("simpleChinese", false);
+                    textForUi = simpleChinese ? ZhConverterUtil.toSimple(raw) : ZhConverterUtil.toTraditional(raw);
                 } else {
-                    runOnUiThread(() -> layoutModeChinese.setVisibility(View.GONE));
-                    runOnUiThread(() -> {
-                        if (!applyVoiceCommandToResultIfMatches(whisperResult.getResult())) {
+                    textForUi = raw;
+                }
+
+                runOnUiThread(() -> {
+                    tvStatus.setText(getString(R.string.processing_done) + timeTaken + "\u2009ms" + "\n"
+                            + getString(R.string.language) + " "
+                            + new Locale(whisperResult.getLanguage()).getDisplayLanguage() + " "
+                            + (whisperResult.getTask() == Whisper.Action.TRANSCRIBE
+                            ? getString(R.string.mode_transcription) : getString(R.string.mode_translation)));
+                    processingBar.setIndeterminate(false);
+                    if (zh) {
+                        layoutModeChinese.setVisibility(View.VISIBLE);
+                    } else {
+                        layoutModeChinese.setVisibility(View.GONE);
+                    }
+
+                    if (wasLive) {
+                        if (!applyVoiceCommandToResultIfMatches(textForUi)) {
+                            finishMainActivityWhisperLiveHold(textForUi);
+                        }
+                    } else {
+                        if (!applyVoiceCommandToResultIfMatches(textForUi)) {
                             VoiceInputUndoStack.pushFromEditText(tvResult);
                             if (append.isChecked()) {
-                                appendTranscriptChunkWithGap(whisperResult.getResult());
+                                appendTranscriptChunkWithGap(textForUi);
                             } else {
-                                tvResult.setText(whisperResult.getResult());
+                                tvResult.setText(textForUi);
                                 moveCursorToEnd(tvResult);
                             }
                         }
-                    });
-                }
-                runOnUiThread(() -> spinnerTflite.setEnabled(true));
-                if (modeTTS.isChecked()){
-                    tts.speak(whisperResult.getResult(), TextToSpeech.QUEUE_FLUSH, null, null);
-                }
+                    }
+                    spinnerTflite.setEnabled(true);
+                    if (modeTTS.isChecked()) {
+                        tts.speak(whisperResult.getResult(), TextToSpeech.QUEUE_FLUSH, null, null);
+                    }
+                });
             }
         });
     }
@@ -992,6 +1098,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void stopProcessing() {
+        stopMainWhisperLivePreview();
         processingBar.setIndeterminate(false);
         if (moonshineMainRecorder != null) {
             moonshineMainRecorder.stop();

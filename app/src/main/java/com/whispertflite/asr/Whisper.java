@@ -109,6 +109,22 @@ public class Whisper {
         return mInProgress.get();
     }
 
+    /**
+     * Run inference on a PCM snapshot without using the async task queue.
+     * Does not modify {@link RecordBuffer}; caller must not overlap with {@link #start()} on the same buffer window.
+     */
+    public WhisperResult transcribeLivePreview(byte[] pcmPcm16MonoLe) {
+        if (pcmPcm16MonoLe == null || pcmPcm16MonoLe.length < 2) {
+            return null;
+        }
+        synchronized (mWhisperEngine) {
+            if (!mWhisperEngine.isInitialized()) {
+                return null;
+            }
+            return mWhisperEngine.processPcm(mAction, mLangToken, pcmPcm16MonoLe);
+        }
+    }
+
     private void processRecordBufferLoop() {
         while (!Thread.currentThread().isInterrupted()) {
             taskLock.lock();

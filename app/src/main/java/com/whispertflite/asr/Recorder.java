@@ -45,6 +45,9 @@ public class Recorder {
     private final Lock lock = new ReentrantLock();
     private final Condition hasTask = lock.newCondition();
     private final Object fileSavedLock = new Object(); // Lock object for wait/notify
+    private final Object livePcmLock = new Object();
+    /** Non-null only while {@link #recordAudio()} is capturing; used for Whisper live preview. */
+    private ByteArrayOutputStream mActivePcmBuffer;
 
     private volatile boolean shouldStartRecording = false;
     private boolean useVAD = false;
@@ -110,6 +113,16 @@ public class Recorder {
 
     public boolean isInProgress() {
         return mInProgress.get();
+    }
+
+    /** Copy of PCM captured so far; safe to read from another thread while recording. */
+    public byte[] getLivePcmSnapshot() {
+        synchronized (livePcmLock) {
+            if (mActivePcmBuffer == null) {
+                return null;
+            }
+            return mActivePcmBuffer.toByteArray();
+        }
     }
 
     private void sendUpdate(String message) {
@@ -181,7 +194,9 @@ public class Recorder {
         // Calculate maximum byte counts for 30 seconds (for saving)
         int bytesForThirtySeconds = sampleRateInHz * bytesPerSample * channels * 30;
 
-        ByteArrayOutputStream outputBuffer = new ByteArrayOutputStream(); // Buffer for saving data RecordBuffer
+        synchronized (livePcmLock) {
+            mActivePcmBuffer = new ByteArrayOutputStream();
+        }
 
         byte[] audioData = new byte[bufferSize];
         int totalBytesRead = 0;
@@ -193,7 +208,11 @@ public class Recorder {
         while (mInProgress.get() && totalBytesRead < bytesForThirtySeconds) {
             int bytesRead = audioRecord.read(audioData, 0, VAD_FRAME_SIZE * 2);
             if (bytesRead > 0) {
-                outputBuffer.write(audioData, 0, bytesRead);  // Save all bytes read up to 30 seconds
+                synchronized (livePcmLock) {
+                    if (mActivePcmBuffer != null) {
+                        mActivePcmBuffer.write(audioData, 0, bytesRead);
+                    }
+                }
                 totalBytesRead += bytesRead;
             } else {
                 Log.d(TAG, "AudioRecord error, bytes read: " + bytesRead);
@@ -201,7 +220,10 @@ public class Recorder {
             }
 
             if (useVAD){
-                byte[] outputBufferByteArray = outputBuffer.toByteArray();
+                byte[] outputBufferByteArray;
+                synchronized (livePcmLock) {
+                    outputBufferByteArray = mActivePcmBuffer != null ? mActivePcmBuffer.toByteArray() : new byte[0];
+                }
                 if (outputBufferByteArray.length >= VAD_FRAME_SIZE * 2) {
                     // Always use the last VAD_FRAME_SIZE * 2 bytes (16 bit) from outputBuffer for VAD
                     System.arraycopy(outputBufferByteArray, outputBufferByteArray.length - VAD_FRAME_SIZE * 2, vadAudioBuffer, 0, VAD_FRAME_SIZE * 2);
@@ -238,8 +260,13 @@ public class Recorder {
         audioManager.stopBluetoothSco();
         audioManager.setBluetoothScoOn(false);
 
+        byte[] recorded;
+        synchronized (livePcmLock) {
+            recorded = mActivePcmBuffer != null ? mActivePcmBuffer.toByteArray() : new byte[0];
+            mActivePcmBuffer = null;
+        }
         // Save recorded audio data to BufferStore (up to 30 seconds)
-        RecordBuffer.setOutputBuffer(outputBuffer.toByteArray());
+        RecordBuffer.setOutputBuffer(recorded);
         if (totalBytesRead > 6400){  //min 0.2s
             sendUpdate(MSG_RECORDING_DONE);
         } else {

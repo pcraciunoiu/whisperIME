@@ -75,16 +75,24 @@ public class WhisperEngineJava implements WhisperEngine {
 
     @Override
     public WhisperResult processRecordBuffer(Whisper.Action mAction, int mLangToken) {
-        // Calculate Mel spectrogram
         if (BuildConfig.DEBUG) Log.d(TAG, "Calculating Mel spectrogram...");
         float[] melSpectrogram = getMelSpectrogram();
         if (BuildConfig.DEBUG) Log.d(TAG, "Mel spectrogram is calculated...!");
 
-        // Perform inference
         WhisperResult whisperResult = runInference(melSpectrogram, mAction, mLangToken);
         if (BuildConfig.DEBUG) Log.d(TAG, "Inference is executed...!");
 
         return whisperResult;
+    }
+
+    @Override
+    public WhisperResult processPcm(Whisper.Action mAction, int mLangToken, byte[] pcm16MonoLe) {
+        if (pcm16MonoLe == null || pcm16MonoLe.length < 2) {
+            return new WhisperResult("", "", mAction);
+        }
+        if (BuildConfig.DEBUG) Log.d(TAG, "Calculating Mel spectrogram (live PCM)...");
+        float[] melSpectrogram = getMelSpectrogramFromPcm(pcm16MonoLe);
+        return runInference(melSpectrogram, mAction, mLangToken);
     }
 
 
@@ -106,9 +114,16 @@ public class WhisperEngineJava implements WhisperEngine {
     }
 
     private float[] getMelSpectrogram() {
-        // Get samples in PCM_FLOAT format
         float[] samples = RecordBuffer.getSamples();
+        return melSpectrogramFromFloatSamples(samples);
+    }
 
+    private float[] getMelSpectrogramFromPcm(byte[] pcm16MonoLe) {
+        float[] samples = RecordBuffer.samplesFromPcm16Le(pcm16MonoLe);
+        return melSpectrogramFromFloatSamples(samples);
+    }
+
+    private float[] melSpectrogramFromFloatSamples(float[] samples) {
         int fixedInputSize = WhisperUtil.WHISPER_SAMPLE_RATE * WhisperUtil.WHISPER_CHUNK_SIZE;
         float[] inputSamples = new float[fixedInputSize];
         int copyLength = Math.min(samples.length, fixedInputSize);

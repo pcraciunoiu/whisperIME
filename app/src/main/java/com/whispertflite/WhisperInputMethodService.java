@@ -34,6 +34,7 @@ import com.github.houbb.opencc4j.util.ZhConverterUtil;
 import com.whispertflite.asr.OfflineAsrEngines;
 import com.whispertflite.asr.Recorder;
 import com.whispertflite.asr.Whisper;
+import com.whispertflite.asr.WhisperLivePreviewLoop;
 import com.whispertflite.asr.WhisperResult;
 import com.whispertflite.moonshine.MoonshineHoldRecorder;
 import com.whispertflite.moonshine.MoonshineModelFiles;
@@ -70,8 +71,11 @@ public class WhisperInputMethodService extends InputMethodService {
     private LinearLayout layoutButtons;
     private MoonshineHoldRecorder imeMoonshineRecorder = null;
     private ParakeetStreamingRecorder imeParakeetRecorder = null;
+    private WhisperLivePreviewLoop imeWhisperLiveLoop = null;
     /** Live partial already applied undo/newline; skip duplicate apply on finger-up. */
     private boolean imeVoiceCommandConsumed = false;
+    /** Whisper live composing was active; final commit uses {@link #commitHoldTranscription}. */
+    private boolean imeWhisperHadLivePartials = false;
 
     private boolean useMoonshineImeNow() {
         return OfflineAsrEngines.moonshineSelectedAndReady(this);
@@ -98,6 +102,7 @@ public class WhisperInputMethodService extends InputMethodService {
             imeParakeetRecorder.stop();
             imeParakeetRecorder = null;
         }
+        stopImeWhisperLiveLoop();
         deinitModel();
         if (mRecorder != null && mRecorder.isInProgress()) {
             mRecorder.stop();
@@ -206,11 +211,26 @@ public class WhisperInputMethodService extends InputMethodService {
             public void onUpdateReceived(String message) {
                 if (message.equals(Recorder.MSG_RECORDING)) {
                     handler.post(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background_pressed));
+                    boolean livePref = sp.getBoolean("liveTranscribePartials", false);
+                    if (livePref && AsrEnginePreferences.WHISPER.equals(AsrEnginePreferences.mainEngine(WhisperInputMethodService.this))
+                            && mWhisper != null) {
+                        imeWhisperHadLivePartials = true;
+                        applyWhisperActionAndLanguageFromPrefs();
+                        stopImeWhisperLiveLoop();
+                        imeWhisperLiveLoop = new WhisperLivePreviewLoop(handler, mRecorder, mWhisper,
+                                partial -> handler.post(() -> applyLiveImePartial(partial, true)));
+                        imeWhisperLiveLoop.start();
+                    } else {
+                        imeWhisperHadLivePartials = false;
+                    }
                 } else if (message.equals(Recorder.MSG_RECORDING_DONE)) {
+                    stopImeWhisperLiveLoop();
                     HapticFeedback.vibrate(mContext);
                     handler.post(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background));
                     startTranscription();
                 } else if (message.equals(Recorder.MSG_RECORDING_ERROR)) {
+                    stopImeWhisperLiveLoop();
+                    imeWhisperHadLivePartials = false;
                     HapticFeedback.vibrate(mContext);
                     if (countDownTimer!=null) { countDownTimer.cancel();}
                     handler.post(() -> {
@@ -480,11 +500,20 @@ public class WhisperInputMethodService extends InputMethodService {
                     raw = simpleChinese ? ZhConverterUtil.toSimple(raw) : ZhConverterUtil.toTraditional(raw);
                 }
                 final String result = raw;
+                final boolean hadLiveWhisperPartials = imeWhisperHadLivePartials;
+                imeWhisperHadLivePartials = false;
                 handler.post(() -> {
                     processingBar.setIndeterminate(false);
                     tvStatus.setText("");
                     tvStatus.setVisibility(View.GONE);
                     InputConnection ic = getCurrentInputConnection();
+                    if (hadLiveWhisperPartials) {
+                        commitHoldTranscription(ic, result, true);
+                        if (modeAuto && result.trim().length() > 0) {
+                            handler.postDelayed(() -> switchToPreviousInputMethod(), 100);
+                        }
+                        return;
+                    }
                     boolean commitSuccess = false;
                     if (ic != null && result.trim().length() > 0) {
                         Set<String> undo = VoiceCommandPreferences.normalizedUndoPhrases(sp);
@@ -514,18 +543,35 @@ public class WhisperInputMethodService extends InputMethodService {
         });
     }
 
+    private void applyWhisperActionAndLanguageFromPrefs() {
+        if (mWhisper == null) {
+            return;
+        }
+        if (translate) {
+            mWhisper.setAction(Whisper.ACTION_TRANSLATE);
+        } else {
+            mWhisper.setAction(Whisper.ACTION_TRANSCRIBE);
+        }
+        String langCode = sp.getString("language", "auto");
+        int langToken = InputLang.getIdForLanguage(InputLang.getLangList(), langCode);
+        Log.d("WhisperIME", "default langToken " + langToken);
+        mWhisper.setLanguage(langToken);
+    }
+
+    private void stopImeWhisperLiveLoop() {
+        if (imeWhisperLiveLoop != null) {
+            imeWhisperLiveLoop.stop();
+            imeWhisperLiveLoop = null;
+        }
+    }
+
     private void startTranscription() {
+        stopImeWhisperLiveLoop();
         if (countDownTimer!=null) { countDownTimer.cancel();}
         handler.post(() -> processingBar.setProgress(0));
         handler.post(() -> processingBar.setIndeterminate(true));
         if (mWhisper!=null){
-            if (translate) mWhisper.setAction(Whisper.ACTION_TRANSLATE);
-            else mWhisper.setAction(Whisper.ACTION_TRANSCRIBE);
-
-            String langCode = sp.getString("language", "auto");
-            int langToken = InputLang.getIdForLanguage(InputLang.getLangList(),langCode);
-            Log.d("WhisperIME","default langToken " + langToken);
-            mWhisper.setLanguage(langToken);
+            applyWhisperActionAndLanguageFromPrefs();
             mWhisper.start();
         }
     }
