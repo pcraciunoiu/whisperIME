@@ -73,11 +73,10 @@ class MoonshinePocActivity : AppCompatActivity() {
     }
 
     private fun refreshModelStatus() {
-        val ok = MoonshineModelFiles.allModelFilesPresent(this)
-        val arm = MoonshineModelFiles.isDeviceSupported(this)
         binding.parakeetModelStatus.text = when {
-            !arm -> getString(R.string.moonshine_arm64_only)
-            ok -> getString(R.string.moonshine_models_ready)
+            !MoonshineModelFiles.hasArm64V8aAbi() -> getString(R.string.moonshine_requires_arm64_device)
+            !MoonshineModelFiles.loadMoonshineNativeLibraries() -> getString(R.string.moonshine_native_libraries_failed)
+            MoonshineModelFiles.hasMoonshineBaseModelFilesOnDisk(this) -> getString(R.string.moonshine_models_ready)
             else -> getString(R.string.moonshine_models_missing)
         }
     }
@@ -88,11 +87,15 @@ class MoonshinePocActivity : AppCompatActivity() {
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
                     if (!ensureAudioPermission()) return@setOnTouchListener true
-                    if (!MoonshineModelFiles.isDeviceSupported(this)) {
-                        Toast.makeText(this, R.string.moonshine_arm64_only, Toast.LENGTH_LONG).show()
+                    if (!MoonshineModelFiles.hasArm64V8aAbi()) {
+                        Toast.makeText(this, R.string.moonshine_requires_arm64_device, Toast.LENGTH_LONG).show()
                         return@setOnTouchListener true
                     }
-                    if (!MoonshineModelFiles.allModelFilesPresent(this)) {
+                    if (!MoonshineModelFiles.loadMoonshineNativeLibraries()) {
+                        Toast.makeText(this, R.string.moonshine_native_libraries_failed, Toast.LENGTH_LONG).show()
+                        return@setOnTouchListener true
+                    }
+                    if (!MoonshineModelFiles.hasMoonshineBaseModelFilesOnDisk(this)) {
                         Toast.makeText(this, R.string.moonshine_models_missing, Toast.LENGTH_LONG).show()
                         return@setOnTouchListener true
                     }
