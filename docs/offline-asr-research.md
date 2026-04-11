@@ -50,6 +50,8 @@ Cloud-only offerings (e.g. **MAI-Transcribe-1** / Foundry) are **not** candidate
 2. Normalize text and compute **Word Error Rate (WER)** (e.g. Python `jiwer`).
 3. Run the **same file** through each **local** engine build—no upload.
 
+**Concrete workflow:** [wer-benchmark.md](wer-benchmark.md) and `scripts/wer_benchmark.py`.
+
 Community or marketing pages (e.g. “best offline apps”) are **not** substitutes for measured WER on your clips.
 
 ---
