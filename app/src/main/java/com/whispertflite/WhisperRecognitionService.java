@@ -36,6 +36,7 @@ import com.whispertflite.asr.WhisperResult;
 import com.whispertflite.moonshine.MoonshineHoldRecorder;
 import com.whispertflite.moonshine.MoonshinePreferences;
 import com.whispertflite.parakeet.ParakeetStreamingRecorder;
+import com.whispertflite.sherpa.SherpaStreamingRecorder;
 import com.whispertflite.utils.HapticFeedback;
 import com.whispertflite.utils.InputLang;
 
@@ -54,6 +55,7 @@ public class WhisperRecognitionService extends RecognitionService {
     private SharedPreferences sp = null;
     private MoonshineHoldRecorder moonshineRecognitionRecorder = null;
     private ParakeetStreamingRecorder parakeetRecognitionRecorder = null;
+    private SherpaStreamingRecorder sherpaRecognitionRecorder = null;
 
     @Override
     protected void onStartListening(Intent recognizerIntent, Callback callback) {
@@ -133,6 +135,38 @@ public class WhisperRecognitionService extends RecognitionService {
             } else {
                 Log.w(TAG, "parakeet recorder start() failed (missing models or RECORD_AUDIO?)");
                 parakeetRecognitionRecorder = null;
+                try {
+                    callback.error(ERROR_CLIENT);
+                } catch (RemoteException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+            return;
+        }
+
+        if (OfflineAsrEngines.sherpaSelectedAndReady(this, sdcardDataFolder)) {
+            boolean sherpaLivePartials = LiveTranscribePreferences.isEnabled(sp);
+            Log.i(TAG, "onStartListening: engine=sherpa livePartials=" + sherpaLivePartials);
+            Handler mainHandler = new Handler(Looper.getMainLooper());
+            sherpaRecognitionRecorder = new SherpaStreamingRecorder(this, sdcardDataFolder, mainHandler,
+                    partial -> {
+                        if (!sherpaLivePartials) return;
+                        try {
+                            callback.partialResults(SpeechRecognizerBundles.resultsRecognitionSingle(partial));
+                        } catch (RemoteException e) {
+                            throw new RuntimeException(e);
+                        }
+                    });
+            if (sherpaRecognitionRecorder.start()) {
+                Log.d(TAG, "sherpa recorder started");
+                try {
+                    callback.beginningOfSpeech();
+                } catch (RemoteException e) {
+                    throw new RuntimeException(e);
+                }
+            } else {
+                Log.w(TAG, "sherpa recorder start() failed");
+                sherpaRecognitionRecorder = null;
                 try {
                     callback.error(ERROR_CLIENT);
                 } catch (RemoteException e) {
@@ -239,6 +273,10 @@ public class WhisperRecognitionService extends RecognitionService {
             parakeetRecognitionRecorder.stop();
             parakeetRecognitionRecorder = null;
         }
+        if (sherpaRecognitionRecorder != null) {
+            sherpaRecognitionRecorder.stop();
+            sherpaRecognitionRecorder = null;
+        }
         stopRecording();
         deinitModel();
         recognitionCancelled = true;
@@ -263,6 +301,19 @@ public class WhisperRecognitionService extends RecognitionService {
             String fin = parakeetRecognitionRecorder.stop();
             parakeetRecognitionRecorder = null;
             Log.i(TAG, "onStopListening: parakeet finalLen=" + fin.length()
+                    + " preview=\"" + (fin.length() > 64 ? fin.substring(0, 64) + "…" : fin) + "\"");
+            try {
+                callback.endOfSpeech();
+                callback.results(SpeechRecognizerBundles.resultsRecognitionSingle(fin.trim()));
+            } catch (RemoteException e) {
+                throw new RuntimeException(e);
+            }
+            return;
+        }
+        if (sherpaRecognitionRecorder != null) {
+            String fin = sherpaRecognitionRecorder.stop();
+            sherpaRecognitionRecorder = null;
+            Log.i(TAG, "onStopListening: sherpa finalLen=" + fin.length()
                     + " preview=\"" + (fin.length() > 64 ? fin.substring(0, 64) + "…" : fin) + "\"");
             try {
                 callback.endOfSpeech();
