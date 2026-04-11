@@ -79,6 +79,7 @@ public class WhisperRecognitionService extends RecognitionService {
 
         if (useMoonshine) {
             boolean moonshineLivePartials = sp.getBoolean("liveTranscribePartials", false);
+            Log.i(TAG, "onStartListening: engine=moonshine livePartials=" + moonshineLivePartials);
             Handler mainHandler = new Handler(Looper.getMainLooper());
             moonshineRecognitionRecorder = new MoonshineHoldRecorder(this, mainHandler,
                     partial -> {
@@ -94,12 +95,14 @@ public class WhisperRecognitionService extends RecognitionService {
                         }
                     }, moonshineLivePartials);
             if (moonshineRecognitionRecorder.start()) {
+                Log.d(TAG, "moonshine recorder started");
                 try {
                     callback.beginningOfSpeech();
                 } catch (RemoteException e) {
                     throw new RuntimeException(e);
                 }
             } else {
+                Log.w(TAG, "moonshine recorder start() failed");
                 moonshineRecognitionRecorder = null;
                 try {
                     callback.error(ERROR_CLIENT);
@@ -114,6 +117,8 @@ public class WhisperRecognitionService extends RecognitionService {
                 && ParakeetModelFiles.allOnnxPresent(sdcardDataFolder);
         if (useParakeet) {
             boolean livePartials = sp.getBoolean("liveTranscribePartials", false);
+            Log.i(TAG, "onStartListening: engine=parakeet livePartials=" + livePartials
+                    + " modelsDir=" + (sdcardDataFolder != null));
             Handler mainHandler = new Handler(Looper.getMainLooper());
             parakeetRecognitionRecorder = new ParakeetStreamingRecorder(this, sdcardDataFolder, mainHandler,
                     partial -> {
@@ -129,12 +134,14 @@ public class WhisperRecognitionService extends RecognitionService {
                         }
                     });
             if (parakeetRecognitionRecorder.start()) {
+                Log.d(TAG, "parakeet recorder started");
                 try {
                     callback.beginningOfSpeech();
                 } catch (RemoteException e) {
                     throw new RuntimeException(e);
                 }
             } else {
+                Log.w(TAG, "parakeet recorder start() failed (missing models or RECORD_AUDIO?)");
                 parakeetRecognitionRecorder = null;
                 try {
                     callback.error(ERROR_CLIENT);
@@ -145,6 +152,8 @@ public class WhisperRecognitionService extends RecognitionService {
             return;
         }
 
+        Log.i(TAG, "onStartListening: engine=whisper model=" + selectedTfliteFile.getName()
+                + " exists=" + selectedTfliteFile.exists());
         if (!selectedTfliteFile.exists()) {
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -220,10 +229,11 @@ public class WhisperRecognitionService extends RecognitionService {
 
     @Override
     protected void onStopListening(Callback callback) {
-        Log.d(TAG,"StopListening");
+        Log.d(TAG, "onStopListening");
         if (moonshineRecognitionRecorder != null) {
             String fin = moonshineRecognitionRecorder.stop();
             moonshineRecognitionRecorder = null;
+            Log.i(TAG, "onStopListening: moonshine finalLen=" + fin.length());
             try {
                 callback.endOfSpeech();
                 Bundle results = new Bundle();
@@ -239,6 +249,8 @@ public class WhisperRecognitionService extends RecognitionService {
         if (parakeetRecognitionRecorder != null) {
             String fin = parakeetRecognitionRecorder.stop();
             parakeetRecognitionRecorder = null;
+            Log.i(TAG, "onStopListening: parakeet finalLen=" + fin.length()
+                    + " preview=\"" + (fin.length() > 64 ? fin.substring(0, 64) + "…" : fin) + "\"");
             try {
                 callback.endOfSpeech();
                 Bundle results = new Bundle();

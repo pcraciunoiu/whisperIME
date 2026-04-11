@@ -1,6 +1,6 @@
 # Publishing (F-Droid & GitHub Releases)
 
-This branch uses application id **`org.speechtotext.input`** and display name **SpeechToText** so it installs alongside the upstream F-Droid app (`org.woheller69.whisper`).
+This branch uses application id **`org.speechtotext.input`** and display name **SpeechToText** so it installs alongside the upstream F-Droid app (`org.woheller69.whisper`). **Debug** builds use `applicationIdSuffix ".debug"` (`org.speechtotext.input.debug`) so they do not overwrite a release install.
 
 ## GitHub Actions — repository secrets
 

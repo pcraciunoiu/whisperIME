@@ -37,6 +37,7 @@ import com.whispertflite.asr.WhisperResult;
 import com.whispertflite.moonshine.MoonshineHoldRecorder;
 import com.whispertflite.moonshine.MoonshineModelFiles;
 import com.whispertflite.moonshine.MoonshinePreferences;
+import com.whispertflite.parakeet.ParakeetEnginePool;
 import com.whispertflite.parakeet.ParakeetModelFiles;
 import com.whispertflite.parakeet.ParakeetStreamingRecorder;
 import com.whispertflite.utils.HapticFeedback;
@@ -149,6 +150,8 @@ public class WhisperInputMethodService extends InputMethodService {
                 intent.putExtra(DownloadActivity.EXTRA_PREFERRED_ENGINE, AsrEnginePreferences.PARAKEET);
                 intent.addFlags(FLAG_ACTIVITY_NEW_TASK);
                 startActivity(intent);
+            } else {
+                ParakeetEnginePool.warm(this, sdcardDataFolder);
             }
             return;
         }
@@ -584,7 +587,11 @@ public class WhisperInputMethodService extends InputMethodService {
     }
 
     private void commitHoldTranscription(InputConnection ic, String fin, boolean hadLivePartials) {
-        if (ic == null) return;
+        if (ic == null) {
+            Log.w(TAG, "commitHoldTranscription: InputConnection null (lost focus?); fin.length="
+                    + (fin != null ? fin.length() : -1));
+            return;
+        }
         String t = fin.trim();
         Set<String> undo = VoiceCommandPreferences.normalizedUndoPhrases(sp);
         Set<String> nl = VoiceCommandPreferences.normalizedNewlinePhrases(sp);
@@ -613,8 +620,12 @@ public class WhisperInputMethodService extends InputMethodService {
         if (t.length() > 0) {
             VoiceInputUndoStack.pushFromInputConnection(ic);
             ic.commitText(t + " ", 1);
+            Log.i(TAG, "commitHoldTranscription: committed chars=" + t.length() + " hadLivePartials=" + hadLivePartials);
         } else if (hadLivePartials) {
             ic.finishComposingText();
+            Log.i(TAG, "commitHoldTranscription: finishComposingText (final empty; composing may hold text)");
+        } else {
+            Log.d(TAG, "commitHoldTranscription: empty transcript, no live composing (check mic/engine)");
         }
     }
 

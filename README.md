@@ -39,7 +39,12 @@ For **voice input** (not the IME), use Android settings (**System → Languages 
 If SpeechToText does not appear as voice input (only Google/Samsung, etc.):
 
 - enable USB debugging
-- run: `adb shell settings put secure voice_recognition_service org.speechtotext.input/com.whispertflite.WhisperRecognitionService`
+- run (release / F-Droid package `org.speechtotext.input`):  
+  `adb shell settings put secure voice_recognition_service org.speechtotext.input/com.whispertflite.WhisperRecognitionService`
+- run (**debug** build from Android Studio / `./gradlew assembleDebug`, package `org.speechtotext.input.debug`):  
+  `adb shell settings put secure voice_recognition_service org.speechtotext.input.debug/com.whispertflite.WhisperRecognitionService`
+
+Debug and release install as **separate apps** so local development does not replace the store build.
 
 ## Using SpeechToText
 

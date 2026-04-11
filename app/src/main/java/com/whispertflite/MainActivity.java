@@ -50,6 +50,7 @@ import com.whispertflite.moonshine.MoonshineHoldRecorder;
 import com.whispertflite.moonshine.MoonshineModelFiles;
 import com.whispertflite.moonshine.MoonshinePocActivity;
 import com.whispertflite.moonshine.MoonshinePreferences;
+import com.whispertflite.parakeet.ParakeetEnginePool;
 import com.whispertflite.parakeet.ParakeetModelFiles;
 import com.whispertflite.parakeet.ParakeetStreamingRecorder;
 import com.whispertflite.utils.HapticFeedback;
@@ -234,6 +235,7 @@ public class MainActivity extends AppCompatActivity {
             deinitModel();
         }
         applyEngineUiMode(engineValues[engineSel]);
+        maybePreheatParakeet();
 
         spnrAsrEngine.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
@@ -246,6 +248,7 @@ public class MainActivity extends AppCompatActivity {
                     deinitModel();
                 }
                 applyEngineUiMode(eng);
+                maybePreheatParakeet();
             }
 
             @Override
@@ -701,6 +704,12 @@ public class MainActivity extends AppCompatActivity {
                 mainVoiceCommandConsumed = false;
             } else {
                 mainVoiceCommandConsumed = false;
+                // Partials usually fill the editor during the hold; if they never did but the final
+                // transcript is non-empty (e.g. first tokens only at stop), apply fin here.
+                if (!fin.trim().isEmpty() && tvResult.getText().toString().trim().isEmpty()) {
+                    tvResult.setText(fin);
+                    moveCursorToEnd(tvResult);
+                }
             }
             mainLiveAppendPrefix = null;
         }
@@ -826,6 +835,17 @@ public class MainActivity extends AppCompatActivity {
         i.putExtra(DownloadActivity.EXTRA_PREFERRED_ENGINE, engine);
         startActivity(i);
         Toast.makeText(this, R.string.models_missing_open_download, Toast.LENGTH_SHORT).show();
+    }
+
+    /** Loads Parakeet ONNX sessions in the background so the first hold skips multi-second init. */
+    private void maybePreheatParakeet() {
+        if (!AsrEnginePreferences.PARAKEET.equals(AsrEnginePreferences.mainEngine(this))) {
+            return;
+        }
+        if (sdcardDataFolder == null || !ParakeetModelFiles.allOnnxPresent(sdcardDataFolder)) {
+            return;
+        }
+        ParakeetEnginePool.warm(this, sdcardDataFolder);
     }
 
     private boolean ensureEngineModelsReady() {

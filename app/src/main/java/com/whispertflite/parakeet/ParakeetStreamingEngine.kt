@@ -5,7 +5,6 @@ import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
 import android.content.Context
 import android.util.Log
-import com.whispertflite.BuildConfig
 import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -108,7 +107,7 @@ class ParakeetStreamingEngine(
             val chunkTag = debugChunkCount
             val melChunk = melExtractor.pcm16ToMelLog(pcm)
             val melEnc = stitchEncoderMel(melChunk)
-            if (BuildConfig.DEBUG && chunkTag == 1) {
+            if (Log.isLoggable(TAG, Log.DEBUG) && chunkTag == 1) {
                 var mn = Float.POSITIVE_INFINITY
                 var mx = Float.NEGATIVE_INFINITY
                 for (x in melChunk) {
@@ -154,7 +153,7 @@ class ParakeetStreamingEngine(
                     val lcLenNext = encResult[4] as OnnxTensor
                     val Te = encLenTensor.longBuffer.get(0).toInt()
                     encTeThisChunk = Te
-                    if (BuildConfig.DEBUG) {
+                    if (Log.isLoggable(TAG, Log.DEBUG)) {
                         if (chunkTag == 1) {
                             try {
                                 val inf = encodedTensor.info
@@ -193,7 +192,7 @@ class ParakeetStreamingEngine(
                 bgTensor.close()
             }
             val decoded = tokenizer.decodeTokenIds(emittedIds)
-            if (BuildConfig.DEBUG) {
+            if (Log.isLoggable(TAG, Log.DEBUG)) {
                 Log.d(
                     TAG,
                     "chunk#$debugChunkCount summary Te=$encTeThisChunk totalIds=${emittedIds.size} textLen=${decoded.length} " +
@@ -258,7 +257,7 @@ class ParakeetStreamingEngine(
                                 best = i
                             }
                         }
-                        if (BuildConfig.DEBUG && !debugLoggedDecoderMeta && t == 0) {
+                        if (Log.isLoggable(TAG, Log.DEBUG) && !debugLoggedDecoderMeta && t == 0) {
                             debugLoggedDecoderMeta = true
                             try {
                                 val inf = outLogits.info

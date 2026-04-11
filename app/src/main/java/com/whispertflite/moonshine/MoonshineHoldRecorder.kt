@@ -13,7 +13,6 @@ import android.media.MediaRecorder
 import android.os.Handler
 import android.util.Log
 import androidx.core.app.ActivityCompat
-import com.whispertflite.BuildConfig
 import java.util.function.Consumer
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.min
@@ -68,7 +67,7 @@ class MoonshineHoldRecorder(
         worker = null
         val last = lastTranscript
         transcriber = null
-        if (BuildConfig.DEBUG) {
+        if (Log.isLoggable(TAG, Log.DEBUG)) {
             Log.d(TAG, "stop() finalLen=${last.length} pseudoChunks=$pseudoChunks preview=\"${last.take(80)}\"")
         }
         return last
@@ -169,7 +168,7 @@ class MoonshineHoldRecorder(
     }
 
     private fun recordLoop() {
-        if (BuildConfig.DEBUG) Log.d(TAG, "worker: thread started")
+        if (Log.isLoggable(TAG, Log.DEBUG)) Log.d(TAG, "worker: thread started")
         val loadThread =
             Thread(
                 {
@@ -181,7 +180,7 @@ class MoonshineHoldRecorder(
                             JNI.MOONSHINE_MODEL_ARCH_BASE,
                         )
                         transcriber = tr
-                        if (BuildConfig.DEBUG) {
+                        if (Log.isLoggable(TAG, Log.DEBUG)) {
                             Log.d(TAG, "worker: Moonshine Base ready in ${android.os.SystemClock.elapsedRealtime() - t0}ms")
                         }
                     } catch (e: Exception) {
@@ -244,7 +243,7 @@ class MoonshineHoldRecorder(
         }
 
         record.startRecording()
-        if (BuildConfig.DEBUG) {
+        if (Log.isLoggable(TAG, Log.DEBUG)) {
             Log.d(TAG, "worker: mic on — buffering (max ${MoonshineConstants.MAX_RECORD_SECONDS}s)")
         }
         val readBuf = ShortArray(2048)
@@ -262,7 +261,7 @@ class MoonshineHoldRecorder(
                 if (n == 0) continue
                 if (!loggedFirst) {
                     loggedFirst = true
-                    if (BuildConfig.DEBUG) {
+                    if (Log.isLoggable(TAG, Log.DEBUG)) {
                         Log.d(TAG, "worker: first samples read n=$n (modelReady=${transcriber != null})")
                     }
                 }
@@ -330,7 +329,7 @@ class MoonshineHoldRecorder(
                         val transcript = tr.transcribeWithoutStreaming(floats, sampleRate)
                         val text = transcript?.text()?.trim() ?: ""
                         lastTranscript = text
-                        if (BuildConfig.DEBUG) {
+                        if (Log.isLoggable(TAG, Log.DEBUG)) {
                             Log.d(TAG, "worker: transcribe samples=$len textLen=${text.length} \"${text.take(48)}\"")
                         }
                         if (text.isNotEmpty()) {

@@ -14,6 +14,7 @@ import com.whispertflite.moonshine.MoonshineDownloader
 import com.whispertflite.moonshine.MoonshineModelFiles
 import com.whispertflite.moonshine.MoonshinePreferences
 import com.whispertflite.parakeet.ParakeetDownloader
+import com.whispertflite.parakeet.ParakeetEnginePool
 import com.whispertflite.parakeet.ParakeetModelFiles
 import com.whispertflite.parakeet.ParakeetPreferences
 import com.whispertflite.utils.Downloader
@@ -168,10 +169,12 @@ class DownloadActivity : AppCompatActivity() {
                     Runnable {
                         val dir = getExternalFilesDir(null)
                         if (dir != null && ParakeetModelFiles.allOnnxPresent(dir)) {
+                            ParakeetEnginePool.invalidate()
                             AsrEnginePreferences.setMainEngine(this, AsrEnginePreferences.PARAKEET)
                             PreferenceManager.getDefaultSharedPreferences(this).edit()
                                 .putBoolean(com.whispertflite.parakeet.ParakeetPreferences.KEY_USE_PARAKEET_MAIN, true)
                                 .apply()
+                            ParakeetEnginePool.warm(this, dir)
                         }
                         binding?.downloadProgress?.progress = 100
                         binding?.buttonStart?.visibility = View.VISIBLE

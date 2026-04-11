@@ -3,6 +3,23 @@ plugins {
     id 'org.jetbrains.kotlin.android'
 }
 
+// Resolved AAR used only to unpack Microsoft's libonnxruntime.so into jniLibs so it wins over
+// moonshine-voice's bundled (older) libonnxruntime.so. Without this, JNI matches MS ORT 1.19.x
+// but the merged native runtime is Moonshine's — Parakeet ONNX sessions fail or misbehave.
+configurations {
+    ortJniUnpack {
+        canBeConsumed = false
+        canBeResolved = true
+    }
+}
+
+tasks.register('unpackMicrosoftOrtJni', Copy) {
+    from({ zipTree(configurations.ortJniUnpack.singleFile) }) {
+        include 'jni/**'
+    }
+    into layout.buildDirectory.dir('microsoftOrtJni')
+}
+
 android {
     namespace 'com.whispertflite'
     compileSdk 35
@@ -38,6 +55,12 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Install alongside release/F-Droid builds (different package / userdata).
+            applicationIdSuffix ".debug"
+            versionNameSuffix "-debug"
+            resValue "string", "app_name", "SpeechToText (Debug)"
+        }
         release {
             if (releaseKeystorePath != null) {
                 signingConfig signingConfigs.release
@@ -71,15 +94,24 @@ android {
     }
 
     // Parakeet (MS ORT) and moonshine-voice both ship libonnxruntime.so — keep one copy.
+    // unpackMicrosoftOrtJni + sourceSets jniLibs below force Microsoft's runtime (see top of file).
     packaging {
         jniLibs {
             pickFirsts += ['lib/arm64-v8a/libonnxruntime.so']
             pickFirsts += ['lib/armeabi-v7a/libonnxruntime.so']
         }
     }
+
+    sourceSets {
+        main {
+            jniLibs.srcDirs += layout.buildDirectory.dir('microsoftOrtJni/jni')
+        }
+    }
 }
 
 dependencies {
+    ortJniUnpack 'com.microsoft.onnxruntime:onnxruntime-android:1.19.2'
+
     implementation 'androidx.appcompat:appcompat:1.7.0'
     implementation 'com.google.android.material:material:1.12.0'
     implementation 'androidx.constraintlayout:constraintlayout:2.2.0'
@@ -101,3 +133,5 @@ dependencies {
     implementation 'com.github.houbb:opencc4j:1.8.1'
     implementation 'com.github.woheller69:FreeDroidWarn:+'
 }
+
+tasks.named('preBuild').configure { dependsOn('unpackMicrosoftOrtJni') }
