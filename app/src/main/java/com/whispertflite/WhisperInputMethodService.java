@@ -44,6 +44,8 @@ import com.whispertflite.moonshine.MoonshinePreferences;
 import com.whispertflite.parakeet.ParakeetEnginePool;
 import com.whispertflite.parakeet.ParakeetModelFiles;
 import com.whispertflite.parakeet.ParakeetStreamingRecorder;
+import com.whispertflite.sherpa.SherpaModelFiles;
+import com.whispertflite.sherpa.SherpaStreamingRecorder;
 import com.whispertflite.utils.HapticFeedback;
 import com.whispertflite.utils.InputLang;
 
@@ -75,6 +77,7 @@ public class WhisperInputMethodService extends InputMethodService {
     private LinearLayout layoutButtons;
     private MoonshineHoldRecorder imeMoonshineRecorder = null;
     private ParakeetStreamingRecorder imeParakeetRecorder = null;
+    private SherpaStreamingRecorder imeSherpaRecorder = null;
     private WhisperLivePreviewLoop imeWhisperLiveLoop = null;
     /** Live partial already applied undo/newline; skip duplicate apply on finger-up. */
     private boolean imeVoiceCommandConsumed = false;
@@ -87,6 +90,10 @@ public class WhisperInputMethodService extends InputMethodService {
 
     private boolean useParakeetImeNow() {
         return OfflineAsrEngines.parakeetSelectedAndReady(this, sdcardDataFolder);
+    }
+
+    private boolean useSherpaImeNow() {
+        return OfflineAsrEngines.sherpaSelectedAndReady(this, sdcardDataFolder);
     }
 
     @Override
@@ -105,6 +112,10 @@ public class WhisperInputMethodService extends InputMethodService {
         if (imeParakeetRecorder != null) {
             imeParakeetRecorder.stop();
             imeParakeetRecorder = null;
+        }
+        if (imeSherpaRecorder != null) {
+            imeSherpaRecorder.stop();
+            imeSherpaRecorder = null;
         }
         stopImeWhisperLiveLoop();
         deinitModel();
@@ -128,6 +139,10 @@ public class WhisperInputMethodService extends InputMethodService {
             if (imeParakeetRecorder != null) {
                 imeParakeetRecorder.stop();
                 imeParakeetRecorder = null;
+            }
+            if (imeSherpaRecorder != null) {
+                imeSherpaRecorder.stop();
+                imeSherpaRecorder = null;
             }
         }
     }
@@ -159,6 +174,18 @@ public class WhisperInputMethodService extends InputMethodService {
                 startActivity(intent);
             } else {
                 ParakeetEnginePool.warm(this, sdcardDataFolder);
+            }
+            return;
+        }
+        if (AsrEnginePreferences.SHERPA.equals(eng)) {
+            deinitModel();
+            if (sdcardDataFolder == null
+                    || !SherpaModelFiles.allFilesPresentForSelectedVariant(sdcardDataFolder, this)) {
+                switchToPreviousInputMethod();
+                Intent intent = new Intent(this, DownloadActivity.class);
+                intent.putExtra(DownloadActivity.EXTRA_PREFERRED_ENGINE, AsrEnginePreferences.SHERPA);
+                intent.addFlags(FLAG_ACTIVITY_NEW_TASK);
+                startActivity(intent);
             }
             return;
         }
@@ -393,6 +420,44 @@ public class WhisperInputMethodService extends InputMethodService {
                 }
                 return true;
             }
+            if (useSherpaImeNow()) {
+                if (event.getAction() == MotionEvent.ACTION_DOWN) {
+                    imeVoiceCommandConsumed = false;
+                    handler.post(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background_pressed));
+                    if (checkRecordPermission()) {
+                        HapticFeedback.vibrate(this);
+                        imeSherpaRecorder = new SherpaStreamingRecorder(this, sdcardDataFolder, handler,
+                                partial -> handler.post(() -> applyLiveImePartial(partial, liveImePartials)));
+                        if (!imeSherpaRecorder.start()) {
+                            imeSherpaRecorder = null;
+                        }
+                        handler.post(() -> processingBar.setProgress(100));
+                        countDownTimer = new CountDownTimer(RecordingTimings.HOLD_TO_TALK_MAX_MS, 1000) {
+                            @Override
+                            public void onTick(long l) {
+                                handler.post(() -> processingBar.setProgress((int) (l / RecordingTimings.COUNTDOWN_PROGRESS_DIVISOR_MS)));
+                            }
+                            @Override
+                            public void onFinish() {}
+                        };
+                        countDownTimer.start();
+                        handler.post(() -> {
+                            tvStatus.setText("");
+                            tvStatus.setVisibility(View.GONE);
+                        });
+                    }
+                } else if (event.getAction() == MotionEvent.ACTION_UP) {
+                    handler.post(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background));
+                    if (countDownTimer != null) countDownTimer.cancel();
+                    handler.post(() -> processingBar.setProgress(0));
+                    if (imeSherpaRecorder != null) {
+                        String fin = imeSherpaRecorder.stop();
+                        imeSherpaRecorder = null;
+                        handler.post(() -> commitHoldTranscription(getCurrentInputConnection(), fin, liveImePartials));
+                    }
+                }
+                return true;
+            }
             if (useParakeetImeNow()) {
                 if (event.getAction() == MotionEvent.ACTION_DOWN) {
                     imeVoiceCommandConsumed = false;
@@ -488,6 +553,10 @@ public class WhisperInputMethodService extends InputMethodService {
             if (imeParakeetRecorder != null) {
                 imeParakeetRecorder.stop();
                 imeParakeetRecorder = null;
+            }
+            if (imeSherpaRecorder != null) {
+                imeSherpaRecorder.stop();
+                imeSherpaRecorder = null;
             }
             if (mWhisper != null) stopTranscription();
             switchToPreviousInputMethod();
