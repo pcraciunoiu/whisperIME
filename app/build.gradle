@@ -21,6 +21,23 @@ tasks.register('unpackMicrosoftOrtJni', Copy) {
     into layout.buildDirectory.dir('microsoftOrtJni')
 }
 
+// Sherpa-onnx spike: official k2-fsa AAR (JNI + Kotlin API). Pinned to match release assets.
+def sherpaOnnxAarVersion = '1.12.36'
+def sherpaOnnxReleaseTag = 'v1.12.37'
+def sherpaOnnxAarFile = file("$buildDir/sherpaOnnx/sherpa-onnx-${sherpaOnnxAarVersion}.aar")
+
+tasks.register('downloadSherpaOnnxAar') {
+    outputs.file(sherpaOnnxAarFile)
+    description = 'Downloads sherpa-onnx Android AAR from GitHub releases if missing.'
+    doLast {
+        sherpaOnnxAarFile.parentFile.mkdirs()
+        if (!sherpaOnnxAarFile.exists()) {
+            def url = "https://github.com/k2-fsa/sherpa-onnx/releases/download/${sherpaOnnxReleaseTag}/sherpa-onnx-${sherpaOnnxAarVersion}.aar"
+            new URL(url).withInputStream { i -> sherpaOnnxAarFile.withOutputStream { it << i } }
+        }
+    }
+}
+
 android {
     namespace 'com.whispertflite'
     compileSdk 35
@@ -94,8 +111,9 @@ android {
         includeInBundle = false
     }
 
-    // Parakeet (MS ORT) and moonshine-voice both ship libonnxruntime.so — keep one copy.
+    // Parakeet (MS ORT), moonshine-voice, and sherpa-onnx AAR each ship libonnxruntime.so — keep one copy.
     // unpackMicrosoftOrtJni + sourceSets jniLibs below force a single MS runtime (see top of file).
+    // Sherpa JNI is built against an ORT in the AAR; at runtime we rely on MS ORT 1.23.x — verify on device.
     packaging {
         jniLibs {
             pickFirsts += ['lib/arm64-v8a/libonnxruntime.so']
@@ -134,6 +152,12 @@ dependencies {
     implementation 'com.github.gkonovalov.android-vad:webrtc:2.0.9'
     implementation 'com.github.houbb:opencc4j:1.8.1'
     implementation 'com.github.woheller69:FreeDroidWarn:+'
+
+    // Spike: k2-fsa sherpa-onnx (streaming ASR JNI + Kotlin bindings). AAR downloaded by downloadSherpaOnnxAar.
+    implementation(files(sherpaOnnxAarFile))
 }
 
-tasks.named('preBuild').configure { dependsOn('unpackMicrosoftOrtJni') }
+tasks.named('preBuild').configure {
+    dependsOn('unpackMicrosoftOrtJni')
+    dependsOn('downloadSherpaOnnxAar')
+}
