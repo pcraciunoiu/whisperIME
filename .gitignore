@@ -1,6 +1,9 @@
 /.idea/
 /app/build/
+/app/.cxx/
 /.gradle/
 /local.properties
 /tmp/
 release-keys.sh
+/third_party/rnnoise/src/rnnoise_data.c
+/third_party/rnnoise/rnnoise_data-*.tar.gz

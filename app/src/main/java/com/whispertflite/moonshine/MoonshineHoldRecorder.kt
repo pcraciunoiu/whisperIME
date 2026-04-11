@@ -9,10 +9,12 @@ import android.content.pm.PackageManager
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioRecord
-import android.media.MediaRecorder
 import android.os.Handler
 import android.util.Log
 import androidx.core.app.ActivityCompat
+import com.whispertflite.asr.AudioCaptureEffects
+import com.whispertflite.asr.AudioCapturePreferences
+import com.whispertflite.asr.RnnoiseDenoiser
 import java.util.function.Consumer
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.min
@@ -217,7 +219,7 @@ class MoonshineHoldRecorder(
         val record =
             try {
                 AudioRecord.Builder()
-                    .setAudioSource(MediaRecorder.AudioSource.VOICE_RECOGNITION)
+                    .setAudioSource(AudioCapturePreferences.audioSource(context))
                     .setAudioFormat(
                         AudioFormat.Builder()
                             .setEncoding(audioFormat)
@@ -242,6 +244,14 @@ class MoonshineHoldRecorder(
             return
         }
 
+        val captureEffects =
+            AudioCaptureEffects.attachIfRequested(
+                record,
+                AudioCapturePreferences.platformNoiseSuppressorEnabled(context),
+                AudioCapturePreferences.platformAecEnabled(context),
+            )
+        val rnnoise = RnnoiseDenoiser.createIfEnabled(context)
+
         record.startRecording()
         if (Log.isLoggable(TAG, Log.DEBUG)) {
             Log.d(TAG, "worker: mic on — buffering (max ${MoonshineConstants.MAX_RECORD_SECONDS}s)")
@@ -259,6 +269,7 @@ class MoonshineHoldRecorder(
                 val n = record.read(readBuf, 0, readBuf.size)
                 if (n < 0) break
                 if (n == 0) continue
+                rnnoise?.processBuffer(readBuf, n)
                 if (!loggedFirst) {
                     loggedFirst = true
                     if (Log.isLoggable(TAG, Log.DEBUG)) {
@@ -347,10 +358,12 @@ class MoonshineHoldRecorder(
                 Log.e(TAG, "transcribe failed", e)
                 if (!liveStarted) lastTranscript = ""
             }
+            rnnoise?.release()
             try {
                 record.stop()
             } catch (_: Exception) {
             }
+            captureEffects?.release()
             record.release()
             audioManager.stopBluetoothSco()
             audioManager.isBluetoothScoOn = false

@@ -44,6 +44,7 @@ import androidx.core.content.ContextCompat;
 
 import com.github.houbb.opencc4j.util.ZhConverterUtil;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
+import com.whispertflite.asr.AudioCaptureUi;
 import com.whispertflite.asr.LiveTranscribePreferences;
 import com.whispertflite.asr.Recorder;
 import com.whispertflite.asr.Whisper;
@@ -183,6 +184,18 @@ public class MainActivity extends AppCompatActivity {
         liveTranscribe.setChecked(LiveTranscribePreferences.isEnabled(sp));
         liveTranscribe.setOnCheckedChangeListener((buttonView, isChecked) ->
                 sp.edit().putBoolean(LiveTranscribePreferences.PREFS_KEY, isChecked).apply());
+
+        {
+            Spinner spinnerAudioCapture = findViewById(R.id.spinnerAudioCaptureSource);
+            CheckBox cbAudioNs = findViewById(R.id.mode_audio_platform_ns);
+            CheckBox cbAudioAec = findViewById(R.id.mode_audio_platform_aec);
+            CheckBox cbAudioRnnoise = findViewById(R.id.mode_audio_rnnoise);
+            ArrayAdapter<CharSequence> audioSrcAdapter = ArrayAdapter.createFromResource(this,
+                    R.array.audio_capture_source_entries, android.R.layout.simple_spinner_item);
+            audioSrcAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+            spinnerAudioCapture.setAdapter(audioSrcAdapter);
+            AudioCaptureUi.bindSpinnerAndToggles(this, sp, spinnerAudioCapture, cbAudioNs, cbAudioAec, cbAudioRnnoise);
+        }
 
         etVoiceUndoPhrases = findViewById(R.id.et_voice_undo_phrases);
         etVoiceNewlinePhrases = findViewById(R.id.et_voice_newline_phrases);

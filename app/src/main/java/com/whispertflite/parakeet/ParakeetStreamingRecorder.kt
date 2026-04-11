@@ -6,10 +6,12 @@ import android.content.pm.PackageManager
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioRecord
-import android.media.MediaRecorder
 import android.os.Handler
 import android.util.Log
 import androidx.core.app.ActivityCompat
+import com.whispertflite.asr.AudioCaptureEffects
+import com.whispertflite.asr.AudioCapturePreferences
+import com.whispertflite.asr.RnnoiseDenoiser
 import java.io.File
 import java.util.function.Consumer
 import java.util.concurrent.atomic.AtomicBoolean
@@ -124,7 +126,7 @@ class ParakeetStreamingRecorder(
             audioManager.isBluetoothScoOn = true
             val record = try {
                 AudioRecord.Builder()
-                    .setAudioSource(MediaRecorder.AudioSource.VOICE_RECOGNITION)
+                    .setAudioSource(AudioCapturePreferences.audioSource(context))
                     .setAudioFormat(
                         AudioFormat.Builder()
                             .setEncoding(audioFormat)
@@ -144,6 +146,13 @@ class ParakeetStreamingRecorder(
                 running.set(false)
                 return
             }
+            val captureEffects =
+                AudioCaptureEffects.attachIfRequested(
+                    record,
+                    AudioCapturePreferences.platformNoiseSuppressorEnabled(context),
+                    AudioCapturePreferences.platformAecEnabled(context),
+                )
+            val rnnoise = RnnoiseDenoiser.createIfEnabled(context)
             record.startRecording()
             Log.i(TAG, "mic recording started (16 kHz mono); chunkSamples=${ParakeetConstants.CHUNK_PCM_SAMPLES}")
             val pcmEngine = eng!!
@@ -161,6 +170,7 @@ class ParakeetStreamingRecorder(
                         break
                     }
                     if (n == 0) continue
+                    rnnoise?.processBuffer(readBuf, n)
                     var i = 0
                     while (i < n && running.get()) {
                         val need = ParakeetConstants.CHUNK_PCM_SAMPLES - filled
@@ -212,10 +222,12 @@ class ParakeetStreamingRecorder(
                         Log.e(TAG, "partial flush processPcm16Chunk failed", e)
                     }
                 }
+                rnnoise?.release()
                 try {
                     record.stop()
                 } catch (_: Exception) {
                 }
+                captureEffects?.release()
                 record.release()
                 audioManager.stopBluetoothSco()
                 audioManager.isBluetoothScoOn = false

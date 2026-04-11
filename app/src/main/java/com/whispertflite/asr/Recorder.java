@@ -170,7 +170,7 @@ public class Recorder {
         int sampleRateInHz = 16000;
         int channelConfig = AudioFormat.CHANNEL_IN_MONO;
         int audioFormat = AudioFormat.ENCODING_PCM_16BIT;
-        int audioSource = MediaRecorder.AudioSource.VOICE_RECOGNITION;
+        int audioSource = AudioCapturePreferences.audioSource(mContext);
 
         int bufferSize = AudioRecord.getMinBufferSize(sampleRateInHz, channelConfig, audioFormat);
         if (bufferSize < VAD_FRAME_SIZE * 2) bufferSize = VAD_FRAME_SIZE * 2;
@@ -189,6 +189,11 @@ public class Recorder {
                 .setBufferSizeInBytes(bufferSize);
 
         AudioRecord audioRecord = builder.build();
+        AudioCaptureEffects audioEffects = AudioCaptureEffects.attachIfRequested(
+                audioRecord,
+                AudioCapturePreferences.platformNoiseSuppressorEnabled(mContext),
+                AudioCapturePreferences.platformAecEnabled(mContext));
+        RnnoiseDenoiser rnnoise = RnnoiseDenoiser.createIfEnabled(mContext);
         audioRecord.startRecording();
 
         // Calculate maximum byte counts for 30 seconds (for saving)
@@ -208,6 +213,9 @@ public class Recorder {
         while (mInProgress.get() && totalBytesRead < bytesForThirtySeconds) {
             int bytesRead = audioRecord.read(audioData, 0, VAD_FRAME_SIZE * 2);
             if (bytesRead > 0) {
+                if (rnnoise != null) {
+                    rnnoise.processPcm16Bytes(audioData, bytesRead);
+                }
                 synchronized (livePcmLock) {
                     if (mActivePcmBuffer != null) {
                         mActivePcmBuffer.write(audioData, 0, bytesRead);
@@ -255,7 +263,13 @@ public class Recorder {
             vad = null;
             Log.d(TAG, "Closing VAD");
         }
+        if (rnnoise != null) {
+            rnnoise.release();
+        }
         audioRecord.stop();
+        if (audioEffects != null) {
+            audioEffects.release();
+        }
         audioRecord.release();
         audioManager.stopBluetoothSco();
         audioManager.setBluetoothScoOn(false);
