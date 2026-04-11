@@ -31,6 +31,7 @@ import android.widget.TextView;
 import androidx.core.content.ContextCompat;
 
 import com.github.houbb.opencc4j.util.ZhConverterUtil;
+import com.whispertflite.asr.OfflineAsrEngines;
 import com.whispertflite.asr.Recorder;
 import com.whispertflite.asr.Whisper;
 import com.whispertflite.asr.WhisperResult;
@@ -73,14 +74,11 @@ public class WhisperInputMethodService extends InputMethodService {
     private boolean imeVoiceCommandConsumed = false;
 
     private boolean useMoonshineImeNow() {
-        return AsrEnginePreferences.MOONSHINE.equals(AsrEnginePreferences.mainEngine(this))
-                && MoonshineModelFiles.allModelFilesPresent(this);
+        return OfflineAsrEngines.moonshineSelectedAndReady(this);
     }
 
     private boolean useParakeetImeNow() {
-        return AsrEnginePreferences.PARAKEET.equals(AsrEnginePreferences.mainEngine(this))
-                && sdcardDataFolder != null
-                && ParakeetModelFiles.allOnnxPresent(sdcardDataFolder);
+        return OfflineAsrEngines.parakeetSelectedAndReady(this, sdcardDataFolder);
     }
 
     @Override

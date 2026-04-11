@@ -30,13 +30,12 @@ import androidx.core.content.ContextCompat;
 import androidx.preference.PreferenceManager;
 
 import com.github.houbb.opencc4j.util.ZhConverterUtil;
+import com.whispertflite.asr.OfflineAsrEngines;
 import com.whispertflite.asr.Recorder;
 import com.whispertflite.asr.Whisper;
 import com.whispertflite.asr.WhisperResult;
 import com.whispertflite.moonshine.MoonshineHoldRecorder;
-import com.whispertflite.moonshine.MoonshineModelFiles;
 import com.whispertflite.moonshine.MoonshinePreferences;
-import com.whispertflite.parakeet.ParakeetModelFiles;
 import com.whispertflite.parakeet.ParakeetStreamingRecorder;
 import com.whispertflite.utils.HapticFeedback;
 import com.whispertflite.utils.InputLang;
@@ -74,12 +73,8 @@ public class WhisperRecognizeActivity extends AppCompatActivity {
         MoonshinePreferences.migrateFromParakeetKeys(this);
         sdcardDataFolder = this.getExternalFilesDir(null);
         selectedTfliteFile = new File(sdcardDataFolder, sp.getString("modelName", MULTI_LINGUAL_TOP_WORLD_SLOW));
-        String mainEng = AsrEnginePreferences.mainEngine(mContext);
-        moonshineOverlayMode = AsrEnginePreferences.MOONSHINE.equals(mainEng)
-                && MoonshineModelFiles.allModelFilesPresent(mContext);
-        parakeetOverlayMode = AsrEnginePreferences.PARAKEET.equals(mainEng)
-                && sdcardDataFolder != null
-                && ParakeetModelFiles.allOnnxPresent(sdcardDataFolder);
+        moonshineOverlayMode = OfflineAsrEngines.moonshineSelectedAndReady(mContext);
+        parakeetOverlayMode = OfflineAsrEngines.parakeetSelectedAndReady(mContext, sdcardDataFolder);
         if (!moonshineOverlayMode && !parakeetOverlayMode && !selectedTfliteFile.exists()) {
             Intent intent = new Intent(this, DownloadActivity.class);
             intent.putExtra(DownloadActivity.EXTRA_PREFERRED_ENGINE, AsrEnginePreferences.WHISPER);

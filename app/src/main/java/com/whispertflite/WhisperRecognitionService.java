@@ -12,7 +12,6 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.os.Build;
-import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.RemoteException;
@@ -26,19 +25,18 @@ import androidx.core.content.ContextCompat;
 import androidx.preference.PreferenceManager;
 
 import com.github.houbb.opencc4j.util.ZhConverterUtil;
+import com.whispertflite.asr.OfflineAsrEngines;
 import com.whispertflite.asr.Recorder;
+import com.whispertflite.asr.SpeechRecognizerBundles;
 import com.whispertflite.asr.Whisper;
 import com.whispertflite.asr.WhisperResult;
 import com.whispertflite.moonshine.MoonshineHoldRecorder;
-import com.whispertflite.moonshine.MoonshineModelFiles;
 import com.whispertflite.moonshine.MoonshinePreferences;
-import com.whispertflite.parakeet.ParakeetModelFiles;
 import com.whispertflite.parakeet.ParakeetStreamingRecorder;
 import com.whispertflite.utils.HapticFeedback;
 import com.whispertflite.utils.InputLang;
 
 import java.io.File;
-import java.util.ArrayList;
 
 public class WhisperRecognitionService extends RecognitionService {
     private static final String TAG = "WhisperRecognitionService";
@@ -73,11 +71,7 @@ public class WhisperRecognitionService extends RecognitionService {
         sdcardDataFolder = this.getExternalFilesDir(null);
         selectedTfliteFile = new File(sdcardDataFolder, sp.getString("recognitionServiceModelName", MULTI_LINGUAL_TOP_WORLD_SLOW));
 
-        String eng = AsrEnginePreferences.mainEngine(this);
-        boolean useMoonshine = AsrEnginePreferences.MOONSHINE.equals(eng)
-                && MoonshineModelFiles.allModelFilesPresent(this);
-
-        if (useMoonshine) {
+        if (OfflineAsrEngines.moonshineSelectedAndReady(this)) {
             boolean moonshineLivePartials = sp.getBoolean("liveTranscribePartials", false);
             Log.i(TAG, "onStartListening: engine=moonshine livePartials=" + moonshineLivePartials);
             Handler mainHandler = new Handler(Looper.getMainLooper());
@@ -85,11 +79,7 @@ public class WhisperRecognitionService extends RecognitionService {
                     partial -> {
                         if (!moonshineLivePartials) return;
                         try {
-                            Bundle b = new Bundle();
-                            ArrayList<String> al = new ArrayList<>();
-                            al.add(partial);
-                            b.putStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION, al);
-                            callback.partialResults(b);
+                            callback.partialResults(SpeechRecognizerBundles.resultsRecognitionSingle(partial));
                         } catch (RemoteException e) {
                             throw new RuntimeException(e);
                         }
@@ -113,9 +103,7 @@ public class WhisperRecognitionService extends RecognitionService {
             return;
         }
 
-        boolean useParakeet = AsrEnginePreferences.PARAKEET.equals(eng)
-                && ParakeetModelFiles.allOnnxPresent(sdcardDataFolder);
-        if (useParakeet) {
+        if (OfflineAsrEngines.parakeetSelectedAndReady(this, sdcardDataFolder)) {
             boolean livePartials = sp.getBoolean("liveTranscribePartials", false);
             Log.i(TAG, "onStartListening: engine=parakeet livePartials=" + livePartials
                     + " modelsDir=" + (sdcardDataFolder != null));
@@ -124,11 +112,7 @@ public class WhisperRecognitionService extends RecognitionService {
                     partial -> {
                         if (!livePartials) return;
                         try {
-                            Bundle b = new Bundle();
-                            ArrayList<String> al = new ArrayList<>();
-                            al.add(partial);
-                            b.putStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION, al);
-                            callback.partialResults(b);
+                            callback.partialResults(SpeechRecognizerBundles.resultsRecognitionSingle(partial));
                         } catch (RemoteException e) {
                             throw new RuntimeException(e);
                         }
@@ -236,11 +220,7 @@ public class WhisperRecognitionService extends RecognitionService {
             Log.i(TAG, "onStopListening: moonshine finalLen=" + fin.length());
             try {
                 callback.endOfSpeech();
-                Bundle results = new Bundle();
-                ArrayList<String> resultList = new ArrayList<>();
-                resultList.add(fin.trim());
-                results.putStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION, resultList);
-                callback.results(results);
+                callback.results(SpeechRecognizerBundles.resultsRecognitionSingle(fin.trim()));
             } catch (RemoteException e) {
                 throw new RuntimeException(e);
             }
@@ -253,11 +233,7 @@ public class WhisperRecognitionService extends RecognitionService {
                     + " preview=\"" + (fin.length() > 64 ? fin.substring(0, 64) + "…" : fin) + "\"");
             try {
                 callback.endOfSpeech();
-                Bundle results = new Bundle();
-                ArrayList<String> resultList = new ArrayList<>();
-                resultList.add(fin.trim());
-                results.putStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION, resultList);
-                callback.results(results);
+                callback.results(SpeechRecognizerBundles.resultsRecognitionSingle(fin.trim()));
             } catch (RemoteException e) {
                 throw new RuntimeException(e);
             }
@@ -288,8 +264,6 @@ public class WhisperRecognitionService extends RecognitionService {
                     try {
                         callback.endOfSpeech();
                         deinitModel();
-                        Bundle results = new Bundle();
-                        ArrayList<String> resultList = new ArrayList<>();
 
                         String result = whisperResult.getResult();
                         if (whisperResult.getLanguage().equals("zh")){
@@ -297,9 +271,7 @@ public class WhisperRecognitionService extends RecognitionService {
                             result = simpleChinese ? ZhConverterUtil.toSimple(result) : ZhConverterUtil.toTraditional(result);
                         }
 
-                        resultList.add(result.trim());
-                        results.putStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION, resultList);
-                        callback.results(results);
+                        callback.results(SpeechRecognizerBundles.resultsRecognitionSingle(result.trim()));
                     } catch (RemoteException e) {
                         throw new RuntimeException(e);
                     }
