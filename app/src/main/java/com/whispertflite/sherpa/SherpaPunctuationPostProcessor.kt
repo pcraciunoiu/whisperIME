@@ -1,15 +1,16 @@
 package com.whispertflite.sherpa
 
 import android.content.Context
+import android.util.Log
 import java.util.Locale
 
 /**
- * Offline, lightweight polish for Sherpa streaming output: sentence-style casing and terminal punctuation
- * when the ASR string has none. Does **not** call the network; optional and user-toggleable.
- *
- * When models already emit commas / periods, this mostly leaves text unchanged (see [likelyHasPunctuation]).
+ * Final-text polish after Sherpa streaming: optional **neural** punctuation (k2-fsa ONNX via
+ * [SherpaPunctuationEngine]) when a model is selected and on disk, otherwise **heuristics**
+ * (terminal period + shouted-casing fold).
  */
 object SherpaPunctuationPostProcessor {
+    private const val TAG = "SherpaPunctPost"
 
     @JvmStatic
     fun applyFinal(context: Context, raw: String?): String {
@@ -18,17 +19,31 @@ object SherpaPunctuationPostProcessor {
         if (t.isEmpty()) return t
         if (!SherpaPreferences.isPunctuationEnhanceEnabled(context)) return t
 
-        if (!likelyHasPunctuation(t) && t.length >= 8 && t.any { it.isLetter() }) {
-            val last = t.last()
+        val entry = SherpaPunctCatalogEntry.requireById(SherpaPreferences.selectedPunctModelId(context))
+        val ext = context.getExternalFilesDir(null)
+        if (entry.kind != SherpaPunctKind.HEURISTIC &&
+            SherpaPunctuationModelFiles.allFilesPresentForEntry(ext, entry)
+        ) {
+            try {
+                return SherpaPunctuationEngine.addPunctuation(context.applicationContext, t, entry)
+            } catch (e: Exception) {
+                Log.e(TAG, "neural punctuation failed, falling back to heuristics", e)
+            }
+        }
+        return applyHeuristicsOnly(t)
+    }
+
+    private fun applyHeuristicsOnly(t: String): String {
+        var x = t
+        if (!likelyHasPunctuation(x) && x.length >= 8 && x.any { it.isLetter() }) {
+            val last = x.last()
             if (!last.isLetterOrDigit() && last !in ")]}\"'") {
                 // already ends with some symbol; skip
             } else if (last.isLetterOrDigit() || last == ')') {
-                t = t + "."
+                x = x + "."
             }
         }
-
-        t = normalizeShoutedCasing(t)
-        return t
+        return normalizeShoutedCasing(x)
     }
 
     private fun likelyHasPunctuation(s: String): Boolean {
@@ -47,7 +62,6 @@ object SherpaPunctuationPostProcessor {
         val letters = s.count { it.isLetter() }
         if (letters < 3) return s
         val lowerLetters = s.count { it.isLetter() && it.isLowerCase() }
-        // Skip if already mostly lowercase / mixed (e.g. model fixed casing).
         if (lowerLetters * 10 > letters * 3) return s
 
         val folded = s.lowercase(Locale.ROOT)
