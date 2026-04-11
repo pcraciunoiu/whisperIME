@@ -54,6 +54,7 @@ import com.whispertflite.moonshine.MoonshineHoldRecorder;
 import com.whispertflite.moonshine.MoonshineModelFiles;
 import com.whispertflite.moonshine.MoonshinePocActivity;
 import com.whispertflite.moonshine.MoonshinePreferences;
+import com.whispertflite.sherpa.SherpaOnnxSpikeActivity;
 import com.whispertflite.parakeet.ParakeetEnginePool;
 import com.whispertflite.parakeet.ParakeetModelFiles;
 import com.whispertflite.parakeet.ParakeetStreamingRecorder;
@@ -278,6 +279,13 @@ public class MainActivity extends AppCompatActivity {
             startActivity(new Intent(this, MoonshinePocActivity.class));
             return true;
         });
+
+        View btnSherpaSpikeDebug = findViewById(R.id.btnSherpaSpikeDebug);
+        if (BuildConfig.DEBUG) {
+            btnSherpaSpikeDebug.setVisibility(View.VISIBLE);
+            btnSherpaSpikeDebug.setOnClickListener(v ->
+                    startActivity(new Intent(this, SherpaOnnxSpikeActivity.class)));
+        }
 
         spinnerLanguage = findViewById(R.id.spnrLanguage);
         List<Pair<String, String>> languagePairs = LanguagePairAdapter.getLanguagePairs(this);
