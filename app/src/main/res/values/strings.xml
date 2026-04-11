@@ -15,9 +15,17 @@
     <string name="engine_whisper">Whisper (TFLite)</string>
     <string name="engine_parakeet">Parakeet (ONNX, English)</string>
     <string name="engine_moonshine">Moonshine Base (English)</string>
+    <string name="engine_sherpa">Sherpa-ONNX (English streaming)</string>
+    <string name="select_sherpa_model">Sherpa model:</string>
+    <string name="sherpa_model_zipformer_en_20m">Zipformer EN 20M (fast)</string>
+    <string name="sherpa_model_zipformer_en_202306">Zipformer EN Jun 2023 (larger)</string>
+    <string name="sherpa_model_lstm_en">LSTM EN (smaller / baseline)</string>
+    <string name="sherpa_punct_notes_zipformer_en">Char-level; punctuation may be sparse — app can add light offline polish on final text.</string>
+    <string name="sherpa_punct_notes_lstm_en">Word-piece; often unpunctuated — offline final polish recommended.</string>
     <string name="download_model_text_parakeet">\nDownload Parakeet ONNX models from Hugging Face (~650 MB). English streaming.</string>
+    <string name="download_model_text_sherpa">\nSherpa-ONNX: download an English streaming model from Hugging Face (see docs/offline-asr-research.md). Unpack under Android/data/…/files/sherpa-onnx-models/&lt;model-dir&gt; so paths match the built-in catalog (encoder/decoder/joiner + tokens.txt).</string>
     <string name="live_transcribe">Transcribe live</string>
-    <string name="live_transcribe_hint">While you hold the button: Parakeet and Moonshine stream partial text; Whisper updates partial text periodically (on-device, throttled). Final text still uses the full recording when you release.</string>
+    <string name="live_transcribe_hint">While you hold the button: Parakeet, Moonshine, and Sherpa stream partial text; Whisper updates partial text periodically (on-device, throttled). Final text still uses the full recording when you release.</string>
     <string name="models_missing_open_download">Models missing. Opening download screen.</string>
     <string name="select_model">Model:</string>
     <string name="main_model_moonshine">Moonshine Base (English)</string>
@@ -71,6 +79,8 @@
     <string name="whisper_model_missing">Whisper TFLite model is not installed. Open the download screen and fetch Whisper models.</string>
     <string name="parakeet_models_missing">Parakeet ONNX models are not installed. Download them from the setup screen.</string>
     <string name="parakeet_start_failed">Could not start Parakeet (permission or models).</string>
+    <string name="sherpa_models_missing">Sherpa-ONNX model files are missing for the selected variant. See the download screen and docs/offline-asr-research.md.</string>
+    <string name="sherpa_start_failed">Could not start Sherpa (permission or models).</string>
     <string name="voice_undo_phrases_label">Undo last voice edit (comma-separated phrases)</string>
     <string name="voice_newline_phrases_label">New line (comma-separated phrases)</string>
     <string name="voice_undo_phrases_default" translatable="false">scratch that, scratched that</string>
