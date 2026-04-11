@@ -9,6 +9,11 @@ public class ThemeUtils {
 
     public static void setStatusBarAppearance(Activity activity){
         if (Build.VERSION.SDK_INT > Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            // Must run after setContentView: DecorView is null until then, and
+            // PhoneWindow.getInsetsController() NPEs on API 35+ (e.g. Pixel Android 15).
+            if (activity.getWindow().getDecorView() == null) {
+                return;
+            }
             int nightModeFlags = activity.getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
             boolean isDarkMode = (nightModeFlags == Configuration.UI_MODE_NIGHT_YES);
             WindowInsetsController insetsController = activity.getWindow().getInsetsController();
