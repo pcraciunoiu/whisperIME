@@ -11,6 +11,7 @@ import android.widget.Toast;
 import androidx.preference.PreferenceManager;
 
 import com.whispertflite.R;
+import com.whispertflite.asr.WhisperGgmlModels;
 import com.whispertflite.asr.WhisperModelSelection;
 import com.whispertflite.databinding.ActivityDownloadBinding;
 
@@ -49,12 +50,44 @@ public class Downloader {
     static final long modelMultiLingualBaseSize = 107564368;
     static final long modelMultiLingualSmallSize = 307408944;
     static final long modelEnglishOnlySize = 41486616;
+    /** ~32 MiB — ggerganov/whisper.cpp ggml-tiny.en-q5_1.bin (size may vary slightly with HF). */
+    static final long modelGgmlTinyEnQ5Size = 33751040L;
+    static final String modelGgmlTinyEnQ5URL =
+            "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/" + WhisperGgmlModels.GGML_TINY_EN_Q5_1;
     static long downloadModelMultiLingualBaseSize = 0L;
     static long downloadModelMultiLingualSmallSize = 0L;
     static long downloadModelEnglishOnlySize = 0L;
+    static long downloadModelGgmlTinyEnQ5Size = 0L;
     static boolean modelMultiLingualBaseFinished = false;
     static boolean modelEnglishOnlyFinished = false;
     static boolean modelMultiLingualSmallFinished = false;
+    static boolean modelGgmlTinyEnQ5Finished = false;
+
+    private static long whisperDownloadDoneBytes() {
+        return downloadModelEnglishOnlySize
+                + downloadModelMultiLingualSmallSize
+                + downloadModelMultiLingualBaseSize
+                + downloadModelGgmlTinyEnQ5Size;
+    }
+
+    private static long whisperDownloadTotalBytes() {
+        return modelEnglishOnlySize + modelMultiLingualSmallSize + modelMultiLingualBaseSize + modelGgmlTinyEnQ5Size;
+    }
+
+    private static void whisperDownloadRefreshUi(Activity activity, ActivityDownloadBinding binding) {
+        long done = whisperDownloadDoneBytes();
+        long total = whisperDownloadTotalBytes();
+        activity.runOnUiThread(() -> {
+            binding.downloadSize.setText(done / 1024 / 1024 + " MB");
+            binding.downloadProgress.setProgress(total > 0 ? (int) (done * 100.0 / total) : 0);
+            if (modelEnglishOnlyFinished
+                    && modelMultiLingualSmallFinished
+                    && modelMultiLingualBaseFinished
+                    && modelGgmlTinyEnQ5Finished) {
+                binding.buttonStart.setVisibility(View.VISIBLE);
+            }
+        });
+    }
 
     public static boolean checkUpdate(final Activity activity) {
         File modelMultiLingualBaseFile = new File(activity.getExternalFilesDir(null) + "/" + modelMultiLingualBase);
@@ -180,8 +213,7 @@ public class Downloader {
                         outStream.write(buff, 0, len);
                         if (modelMultiLingualBaseFile.exists()) downloadModelMultiLingualBaseSize = modelMultiLingualBaseFile.length();
                         activity.runOnUiThread(() -> {
-                            binding.downloadSize.setText((downloadModelEnglishOnlySize + downloadModelMultiLingualSmallSize + downloadModelMultiLingualBaseSize)/1024/1024 + " MB");
-                            binding.downloadProgress.setProgress((int) (((double)(downloadModelEnglishOnlySize + downloadModelMultiLingualSmallSize + downloadModelMultiLingualBaseSize) / (modelEnglishOnlySize + modelMultiLingualSmallSize +  modelMultiLingualBaseSize)) * 100));
+                            whisperDownloadRefreshUi(activity, binding);
                         });
                     }
                     outStream.flush();
@@ -204,7 +236,7 @@ public class Downloader {
                     } else {
                         modelMultiLingualBaseFinished = true;
                         activity.runOnUiThread(() -> {
-                            if (modelEnglishOnlyFinished && modelMultiLingualSmallFinished && modelMultiLingualBaseFinished) binding.buttonStart.setVisibility(View.VISIBLE);
+                            whisperDownloadRefreshUi(activity, binding);
                         });
                     }
                 } catch (NoSuchAlgorithmException | IOException i) {
@@ -222,7 +254,7 @@ public class Downloader {
             downloadModelMultiLingualBaseSize = modelMultiLingualBaseSize;
             modelMultiLingualBaseFinished = true;
             activity.runOnUiThread(() -> {
-                if (modelEnglishOnlyFinished && modelMultiLingualSmallFinished && modelMultiLingualBaseFinished) binding.buttonStart.setVisibility(View.VISIBLE);
+                whisperDownloadRefreshUi(activity, binding);
             });
         }
 
@@ -255,8 +287,7 @@ public class Downloader {
                         outStream.write(buff, 0, len);
                         if (modelMultiLingualSmallFile.exists()) downloadModelMultiLingualSmallSize = modelMultiLingualSmallFile.length();
                         activity.runOnUiThread(() -> {
-                            binding.downloadSize.setText((downloadModelEnglishOnlySize + downloadModelMultiLingualSmallSize + downloadModelMultiLingualBaseSize)/1024/1024 + " MB");
-                            binding.downloadProgress.setProgress((int) (((double)(downloadModelEnglishOnlySize + downloadModelMultiLingualSmallSize + downloadModelMultiLingualBaseSize) / (modelEnglishOnlySize + modelMultiLingualSmallSize + modelMultiLingualBaseSize)) * 100));
+                            whisperDownloadRefreshUi(activity, binding);
                         });
                     }
                     outStream.flush();
@@ -279,7 +310,7 @@ public class Downloader {
                     } else {
                         modelMultiLingualSmallFinished = true;
                         activity.runOnUiThread(() -> {
-                            if (modelEnglishOnlyFinished && modelMultiLingualSmallFinished && modelMultiLingualBaseFinished) binding.buttonStart.setVisibility(View.VISIBLE);
+                            whisperDownloadRefreshUi(activity, binding);
                         });
                     }
                 } catch (NoSuchAlgorithmException | IOException i) {
@@ -297,7 +328,7 @@ public class Downloader {
             downloadModelMultiLingualSmallSize = modelMultiLingualSmallSize;
             modelMultiLingualSmallFinished = true;
             activity.runOnUiThread(() -> {
-                if (modelEnglishOnlyFinished && modelMultiLingualSmallFinished && modelMultiLingualBaseFinished) binding.buttonStart.setVisibility(View.VISIBLE);
+                whisperDownloadRefreshUi(activity, binding);
             });
         }
 
@@ -327,8 +358,7 @@ public class Downloader {
                         outStream.write(buff, 0, len);
                         if (modelEnglishOnlyFile.exists()) downloadModelEnglishOnlySize = modelEnglishOnlyFile.length();
                         activity.runOnUiThread(() -> {
-                            binding.downloadSize.setText((downloadModelEnglishOnlySize + downloadModelMultiLingualSmallSize + downloadModelMultiLingualBaseSize)/1024/1024 + " MB");
-                            binding.downloadProgress.setProgress((int) (((double)(downloadModelEnglishOnlySize + downloadModelMultiLingualSmallSize + downloadModelMultiLingualBaseSize) / (modelEnglishOnlySize + modelMultiLingualSmallSize +  modelMultiLingualBaseSize)) * 100));
+                            whisperDownloadRefreshUi(activity, binding);
                         });
                     }
                     outStream.flush();
@@ -352,7 +382,7 @@ public class Downloader {
                     } else {
                         modelEnglishOnlyFinished = true;
                         activity.runOnUiThread(() -> {
-                            if (modelEnglishOnlyFinished && modelMultiLingualSmallFinished && modelMultiLingualBaseFinished) binding.buttonStart.setVisibility(View.VISIBLE);
+                            whisperDownloadRefreshUi(activity, binding);
                         });
                     }
                 } catch (NoSuchAlgorithmException | IOException i) {
@@ -370,8 +400,72 @@ public class Downloader {
             downloadModelEnglishOnlySize = modelEnglishOnlySize;
             modelEnglishOnlyFinished = true;
             activity.runOnUiThread(() -> {
-                if (modelEnglishOnlyFinished && modelMultiLingualSmallFinished && modelMultiLingualBaseFinished) binding.buttonStart.setVisibility(View.VISIBLE);
+                whisperDownloadRefreshUi(activity, binding);
             });
+        }
+
+        File modelGgmlTinyEnQ5File =
+                new File(activity.getExternalFilesDir(null), WhisperGgmlModels.GGML_TINY_EN_Q5_1);
+        if (!modelGgmlTinyEnQ5File.exists()) {
+            modelGgmlTinyEnQ5Finished = false;
+            Thread ggmlThread = new Thread(() -> {
+                try {
+                    URL url = new URL(modelGgmlTinyEnQ5URL);
+                    URLConnection ucon = url.openConnection();
+                    ucon.setReadTimeout(60000);
+                    ucon.setConnectTimeout(20000);
+                    InputStream is = ucon.getInputStream();
+                    BufferedInputStream inStream = new BufferedInputStream(is, 1024 * 5);
+                    modelGgmlTinyEnQ5File.createNewFile();
+                    FileOutputStream outStream = new FileOutputStream(modelGgmlTinyEnQ5File);
+                    byte[] buff = new byte[5 * 1024];
+                    int len;
+                    while ((len = inStream.read(buff)) != -1) {
+                        outStream.write(buff, 0, len);
+                        if (modelGgmlTinyEnQ5File.exists()) {
+                            downloadModelGgmlTinyEnQ5Size = modelGgmlTinyEnQ5File.length();
+                        }
+                        activity.runOnUiThread(() -> whisperDownloadRefreshUi(activity, binding));
+                    }
+                    outStream.flush();
+                    outStream.close();
+                    inStream.close();
+                    long flen = modelGgmlTinyEnQ5File.length();
+                    if (flen < 30_000_000L || flen > 45_000_000L) {
+                        modelGgmlTinyEnQ5File.delete();
+                        modelGgmlTinyEnQ5Finished = false;
+                        activity.runOnUiThread(() -> {
+                            Toast.makeText(
+                                            activity,
+                                            activity.getResources().getString(R.string.error_download),
+                                            Toast.LENGTH_SHORT)
+                                    .show();
+                            binding.downloadButton.setEnabled(true);
+                        });
+                    } else {
+                        modelGgmlTinyEnQ5Finished = true;
+                        downloadModelGgmlTinyEnQ5Size = modelGgmlTinyEnQ5Size;
+                        activity.runOnUiThread(() -> whisperDownloadRefreshUi(activity, binding));
+                    }
+                } catch (IOException i) {
+                    modelGgmlTinyEnQ5File.delete();
+                    modelGgmlTinyEnQ5Finished = false;
+                    activity.runOnUiThread(() -> {
+                        Toast.makeText(
+                                        activity,
+                                        activity.getResources().getString(R.string.error_download),
+                                        Toast.LENGTH_SHORT)
+                                .show();
+                        binding.downloadButton.setEnabled(true);
+                    });
+                    Log.w("WhisperASR", activity.getResources().getString(R.string.error_download), i);
+                }
+            });
+            ggmlThread.start();
+        } else {
+            downloadModelGgmlTinyEnQ5Size = modelGgmlTinyEnQ5Size;
+            modelGgmlTinyEnQ5Finished = true;
+            activity.runOnUiThread(() -> whisperDownloadRefreshUi(activity, binding));
         }
 
     }

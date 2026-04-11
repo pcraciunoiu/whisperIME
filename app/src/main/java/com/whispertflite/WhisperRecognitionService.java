@@ -3,7 +3,6 @@ package com.whispertflite;
 import static android.speech.SpeechRecognizer.ERROR_CLIENT;
 import static android.speech.SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS;
 import static android.speech.SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE;
-import static com.whispertflite.MainActivity.ENGLISH_ONLY_MODEL_EXTENSION;
 import static com.whispertflite.MainActivity.ENGLISH_ONLY_VOCAB_FILE;
 import static com.whispertflite.MainActivity.MULTILINGUAL_VOCAB_FILE;
 import static com.whispertflite.MainActivity.MULTI_LINGUAL_TOP_WORLD_SLOW;
@@ -277,7 +276,7 @@ public class WhisperRecognitionService extends RecognitionService {
 
     // Model initialization
     private void initModel(File modelFile, Callback callback, int langToken) {
-        boolean isMultilingualModel = !(modelFile.getName().endsWith(ENGLISH_ONLY_MODEL_EXTENSION));
+        boolean isMultilingualModel = com.whispertflite.asr.WhisperGgmlModels.isMultilingualModelFilename(modelFile.getName());
         String vocabFileName = isMultilingualModel ? MULTILINGUAL_VOCAB_FILE : ENGLISH_ONLY_VOCAB_FILE;
         File vocabFile = new File(sdcardDataFolder, vocabFileName);
 

@@ -25,7 +25,9 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
 import androidx.preference.PreferenceManager;
 
+import com.whispertflite.asr.WhisperGgmlModels;
 import com.whispertflite.asr.WhisperModelSelection;
+import com.whispertflite.asr.WhisperModelUi;
 import com.whispertflite.utils.Downloader;
 import com.whispertflite.utils.LanguagePairAdapter;
 import com.whispertflite.utils.ThemeUtils;
@@ -92,7 +94,7 @@ public class WhisperRecognitionServiceSettingsActivity extends AppCompatActivity
         // Call the method to copy specific file types from assets to data folder
         sdcardDataFolder = this.getExternalFilesDir(null);
 
-        ArrayList<File> tfliteFiles = getFilesWithExtension(sdcardDataFolder, ".tflite");
+        ArrayList<File> tfliteFiles = WhisperGgmlModels.listDownloadedModelFiles(sdcardDataFolder);
 
         selectedTfliteFile = WhisperModelSelection.tfliteFileForRecognitionService(sdcardDataFolder, sp, MULTI_LINGUAL_TOP_WORLD_SLOW);
         ArrayAdapter<File> tfliteAdapter = getFileArrayAdapter(tfliteFiles);
@@ -100,7 +102,7 @@ public class WhisperRecognitionServiceSettingsActivity extends AppCompatActivity
         spinnerTflite = findViewById(R.id.spnrTfliteFiles);
         spinnerTflite.setAdapter(tfliteAdapter);
         spinnerTflite.setSelection(position,false);
-        if (selectedTfliteFile.getName().equals(MULTI_LINGUAL_EU_MODEL_FAST) || selectedTfliteFile.getName().equals(MULTI_LINGUAL_TOP_WORLD_FAST) || selectedTfliteFile.getName().equals(MULTI_LINGUAL_TOP_WORLD_SLOW)){
+        if (WhisperGgmlModels.isMultilingualModelFilename(selectedTfliteFile.getName())) {
             spinnerLanguage.setEnabled(true);
             String langCode = sp.getString("recognitionServiceLanguage", "auto");
             spinnerLanguage.setSelection(languagePairAdapter.getIndexByCode(langCode));
@@ -115,7 +117,7 @@ public class WhisperRecognitionServiceSettingsActivity extends AppCompatActivity
                 SharedPreferences.Editor editor = sp.edit();
                 editor.putString(WhisperModelSelection.PREFS_KEY_RECOGNITION_SERVICE, selectedTfliteFile.getName());
                 editor.apply();
-                if (selectedTfliteFile.getName().equals(MULTI_LINGUAL_EU_MODEL_FAST) || selectedTfliteFile.getName().equals(MULTI_LINGUAL_TOP_WORLD_FAST) || selectedTfliteFile.getName().equals(MULTI_LINGUAL_TOP_WORLD_SLOW)){
+                if (WhisperGgmlModels.isMultilingualModelFilename(selectedTfliteFile.getName())) {
                     spinnerLanguage.setEnabled(true);
                     String langCode = sp.getString("recognitionServiceLanguage", "auto");
                     spinnerLanguage.setSelection(languagePairAdapter.getIndexByCode(langCode));
@@ -148,21 +150,7 @@ public class WhisperRecognitionServiceSettingsActivity extends AppCompatActivity
             public View getView(int position, View convertView, ViewGroup parent) {
                 View view = super.getView(position, convertView, parent);
                 TextView textView = view.findViewById(android.R.id.text1);
-                if ((getItem(position).getName()).equals(MULTI_LINGUAL_MODEL_SLOW))
-                    textView.setText(R.string.multi_lingual_slow);
-                else if ((getItem(position).getName()).equals(MULTI_LINGUAL_TOP_WORLD_SLOW))
-                    textView.setText(R.string.multi_lingual_slow);
-                else if ((getItem(position).getName()).equals(ENGLISH_ONLY_MODEL))
-                    textView.setText(R.string.english_only_fast);
-                else if ((getItem(position).getName()).equals(MULTI_LINGUAL_MODEL_FAST))
-                    textView.setText(R.string.multi_lingual_fast);
-                else if ((getItem(position).getName()).equals(MULTI_LINGUAL_EU_MODEL_FAST))
-                    textView.setText(R.string.multi_lingual_fast);
-                else if ((getItem(position).getName()).equals(MULTI_LINGUAL_TOP_WORLD_FAST))
-                    textView.setText(R.string.multi_lingual_fast);
-                else
-                    textView.setText(getItem(position).getName().substring(0, getItem(position).getName().length() - ".tflite".length()));
-
+                textView.setText(WhisperModelUi.spinnerLabel(WhisperRecognitionServiceSettingsActivity.this, getItem(position)));
                 return view;
             }
 
@@ -170,21 +158,7 @@ public class WhisperRecognitionServiceSettingsActivity extends AppCompatActivity
             public View getDropDownView(int position, View convertView, ViewGroup parent) {
                 View view = super.getDropDownView(position, convertView, parent);
                 TextView textView = view.findViewById(android.R.id.text1);
-                if ((getItem(position).getName()).equals(MULTI_LINGUAL_MODEL_SLOW))
-                    textView.setText(R.string.multi_lingual_slow);
-                else if ((getItem(position).getName()).equals(MULTI_LINGUAL_TOP_WORLD_SLOW))
-                    textView.setText(R.string.multi_lingual_slow);
-                else if ((getItem(position).getName()).equals(ENGLISH_ONLY_MODEL))
-                    textView.setText(R.string.english_only_fast);
-                else if ((getItem(position).getName()).equals(MULTI_LINGUAL_MODEL_FAST))
-                    textView.setText(R.string.multi_lingual_fast);
-                else if ((getItem(position).getName()).equals(MULTI_LINGUAL_EU_MODEL_FAST))
-                    textView.setText(R.string.multi_lingual_fast);
-                else if ((getItem(position).getName()).equals(MULTI_LINGUAL_TOP_WORLD_FAST))
-                    textView.setText(R.string.multi_lingual_fast);
-                else
-                    textView.setText(getItem(position).getName().substring(0, getItem(position).getName().length() - ".tflite".length()));
-
+                textView.setText(WhisperModelUi.spinnerLabel(WhisperRecognitionServiceSettingsActivity.this, getItem(position)));
                 return view;
             }
         };

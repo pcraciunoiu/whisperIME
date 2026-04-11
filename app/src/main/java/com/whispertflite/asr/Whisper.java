@@ -4,6 +4,7 @@ import android.content.Context;
 import android.util.Log;
 
 import com.whispertflite.engine.WhisperEngine;
+import com.whispertflite.engine.WhisperEngineCpp;
 import com.whispertflite.engine.WhisperEngineJava;
 
 import java.io.File;
@@ -34,7 +35,9 @@ public class Whisper {
 
     private final AtomicBoolean mInProgress = new AtomicBoolean(false);
 
-    private final WhisperEngine mWhisperEngine;
+    private final Context mContext;
+    private final Object mEngineLock = new Object();
+    private WhisperEngine mWhisperEngine;
     private Action mAction;
     private int mLangToken = -1;
     private WhisperListener mUpdateListener;
@@ -44,12 +47,9 @@ public class Whisper {
     private volatile boolean taskAvailable = false;
 
     public Whisper(Context context) {
-        this.mWhisperEngine = new WhisperEngineJava(context);
-
-        // Start thread for RecordBuffer transcription
+        mContext = context.getApplicationContext();
         Thread threadProcessRecordBuffer = new Thread(this::processRecordBufferLoop);
         threadProcessRecordBuffer.start();
-
     }
 
     public void setListener(WhisperListener listener) {
@@ -58,24 +58,40 @@ public class Whisper {
 
     public void loadModel(File modelPath, File vocabPath, boolean isMultilingual) {
         loadModel(modelPath.getAbsolutePath(), vocabPath.getAbsolutePath(), isMultilingual);
-        currentModelPath = modelPath.getAbsolutePath();
     }
 
     public void loadModel(String modelPath, String vocabPath, boolean isMultilingual) {
-        try {
-            mWhisperEngine.initialize(modelPath, vocabPath, isMultilingual);
-        } catch (IOException e) {
-            Log.e(TAG, "Error initializing model...", e);
-            sendUpdate("Model initialization failed");
+        synchronized (mEngineLock) {
+            if (mWhisperEngine != null) {
+                mWhisperEngine.deinitialize();
+                mWhisperEngine = null;
+            }
+            WhisperEngine engine = WhisperGgmlModels.isGgmlModelPath(modelPath)
+                    ? new WhisperEngineCpp()
+                    : new WhisperEngineJava(mContext);
+            try {
+                engine.initialize(modelPath, vocabPath, isMultilingual);
+                mWhisperEngine = engine;
+                currentModelPath = modelPath;
+            } catch (IOException e) {
+                Log.e(TAG, "Error initializing model...", e);
+                sendUpdate("Model initialization failed");
+                engine.deinitialize();
+            }
         }
     }
 
-    public String getCurrentModelPath(){
+    public String getCurrentModelPath() {
         return currentModelPath;
     }
 
     public void unloadModel() {
-        mWhisperEngine.deinitialize();
+        synchronized (mEngineLock) {
+            if (mWhisperEngine != null) {
+                mWhisperEngine.deinitialize();
+                mWhisperEngine = null;
+            }
+        }
         currentModelPath = "";
     }
 
@@ -83,7 +99,7 @@ public class Whisper {
         this.mAction = action;
     }
 
-    public void setLanguage(int language){
+    public void setLanguage(int language) {
         this.mLangToken = language;
     }
 
@@ -117,8 +133,8 @@ public class Whisper {
         if (pcmPcm16MonoLe == null || pcmPcm16MonoLe.length < 2) {
             return null;
         }
-        synchronized (mWhisperEngine) {
-            if (!mWhisperEngine.isInitialized()) {
+        synchronized (mEngineLock) {
+            if (mWhisperEngine == null || !mWhisperEngine.isInitialized()) {
                 return null;
             }
             return mWhisperEngine.processPcm(mAction, mLangToken, pcmPcm16MonoLe);
@@ -144,12 +160,20 @@ public class Whisper {
 
     private void processRecordBuffer() {
         try {
-            if (mWhisperEngine.isInitialized() && RecordBuffer.getOutputBuffer() != null) {
+            WhisperEngine engine;
+            synchronized (mEngineLock) {
+                engine = mWhisperEngine;
+            }
+            if (engine != null && engine.isInitialized() && RecordBuffer.getOutputBuffer() != null) {
                 long startTime = System.currentTimeMillis();
                 sendUpdate(MSG_PROCESSING);
 
-                WhisperResult whisperResult = null;
-                synchronized (mWhisperEngine) {
+                WhisperResult whisperResult;
+                synchronized (mEngineLock) {
+                    if (mWhisperEngine == null || !mWhisperEngine.isInitialized()) {
+                        sendUpdate("Engine not initialized or file path not set");
+                        return;
+                    }
                     whisperResult = mWhisperEngine.processRecordBuffer(mAction, mLangToken);
                 }
                 sendResult(whisperResult);
@@ -179,5 +203,4 @@ public class Whisper {
             mUpdateListener.onResultReceived(whisperResult);
         }
     }
-
 }

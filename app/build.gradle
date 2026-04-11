@@ -36,6 +36,16 @@ android {
         versionCode 38
         versionName "3.8"
 
+        ndk {
+            abiFilters "arm64-v8a", "armeabi-v7a"
+        }
+
+        externalNativeBuild {
+            cmake {
+                arguments "-DANDROID_STL=c++_shared"
+                cppFlags "-O3"
+            }
+        }
     }
 
     def releaseKeystorePath = System.getenv("KEYSTORE_FILE")
@@ -70,13 +80,15 @@ android {
             }
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            ndk {
-                abiFilters "arm64-v8a", "armeabi-v7a"
-            }
         }
     }
 
-    // Removed externalNativeBuild block
+    externalNativeBuild {
+        cmake {
+            path "src/main/cpp/CMakeLists.txt"
+            version "3.22.1"
+        }
+    }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11

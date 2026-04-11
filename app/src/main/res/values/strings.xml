@@ -5,14 +5,14 @@
     <string name="need_record_audio_permission">"RECORD_AUDIO permission is not granted"</string>
     <string name="error_download">Download error</string>
     <string name="download_model">Download Model</string>
-    <string name="download_model_text">\nDownload Whisper models from Hugging Face (~435 MB)</string>
+    <string name="download_model_text">\nDownload Whisper models from Hugging Face: TFLite DocWolle checkpoints (~435 MB) plus a quantized whisper.cpp English model (~32 MB).</string>
     <string name="download_model_text_moonshine">\nDownload Moonshine Base English models from the project release (examples tarball). English ASR only; separate from Whisper.</string>
-    <string name="model_choice_whisper">Whisper (TFLite)</string>
+    <string name="model_choice_whisper">Whisper (TFLite / whisper.cpp)</string>
     <string name="model_choice_parakeet">Parakeet (ONNX)</string>
     <string name="model_choice_moonshine">Moonshine Base (English)</string>
     <string name="wizard_model_type">Model type</string>
     <string name="asr_engine">Speech engine</string>
-    <string name="engine_whisper">Whisper (TFLite)</string>
+    <string name="engine_whisper">Whisper (TFLite / whisper.cpp)</string>
     <string name="engine_parakeet">Parakeet (ONNX, English)</string>
     <string name="engine_moonshine">Moonshine Base (English)</string>
     <string name="download_model_text_parakeet">\nDownload Parakeet ONNX models from Hugging Face (~650 MB). English streaming.</string>
@@ -44,6 +44,7 @@
     <string name="language">Language:</string>
     <string name="multi_lingual_slow">Multi-lingual, slow</string>
     <string name="english_only_fast">English only, fast</string>
+    <string name="whisper_ggml_tiny_en_q5">English tiny (whisper.cpp q5, fast)</string>
     <string name="multi_lingual_fast">Multi-lingual, fast</string>
     <string name="mode_transcription">transcription</string>
     <string name="mode_translation">translation</string>

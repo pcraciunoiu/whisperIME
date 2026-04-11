@@ -48,6 +48,8 @@ import com.whispertflite.asr.LiveTranscribePreferences;
 import com.whispertflite.asr.Recorder;
 import com.whispertflite.asr.Whisper;
 import com.whispertflite.asr.WhisperLivePreviewLoop;
+import com.whispertflite.asr.WhisperGgmlModels;
+import com.whispertflite.asr.WhisperModelUi;
 import com.whispertflite.asr.WhisperModelSelection;
 import com.whispertflite.asr.WhisperResult;
 import com.whispertflite.moonshine.MoonshineHoldRecorder;
@@ -242,7 +244,7 @@ public class MainActivity extends AppCompatActivity {
         }
         spnrAsrEngine.setSelection(engineSel, false);
 
-        ArrayList<File> tfliteFiles = getFilesWithExtension(sdcardDataFolder, ".tflite");
+        ArrayList<File> tfliteFiles = WhisperGgmlModels.listDownloadedModelFiles(sdcardDataFolder);
         maybeMigrateModelNameFromSentinel();
 
         if (AsrEnginePreferences.WHISPER.equals(currentEngine)) {
@@ -803,7 +805,7 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
         File modelFile = WhisperModelSelection.tfliteFileForMainScreen(sdcardDataFolder, sp, MULTI_LINGUAL_TOP_WORLD_SLOW);
-        boolean isMultilingualModel = !(modelFile.getName().endsWith(ENGLISH_ONLY_MODEL_EXTENSION));
+        boolean isMultilingualModel = WhisperGgmlModels.isMultilingualModelFilename(modelFile.getName());
         String vocabFileName = isMultilingualModel ? MULTILINGUAL_VOCAB_FILE : ENGLISH_ONLY_VOCAB_FILE;
         File vocabFile = new File(sdcardDataFolder, vocabFileName);
 
@@ -896,19 +898,14 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
         String name = selectedTfliteFile.getName();
-        if (name.equals(ENGLISH_ONLY_MODEL)) {
+        if (!WhisperGgmlModels.isMultilingualModelFilename(name)) {
             spinnerLanguage.setSelection(0);
             spinnerLanguage.setEnabled(false);
             return;
         }
-        if (name.equals(MULTI_LINGUAL_EU_MODEL_FAST) || name.equals(MULTI_LINGUAL_TOP_WORLD_FAST) || name.equals(MULTI_LINGUAL_TOP_WORLD_SLOW)) {
-            spinnerLanguage.setEnabled(true);
-            String langCode = sp.getString("language", "auto");
-            spinnerLanguage.setSelection(languagePairAdapter.getIndexByCode(langCode));
-        } else {
-            spinnerLanguage.setSelection(0);
-            spinnerLanguage.setEnabled(false);
-        }
+        spinnerLanguage.setEnabled(true);
+        String langCode = sp.getString("language", "auto");
+        spinnerLanguage.setSelection(languagePairAdapter.getIndexByCode(langCode));
     }
 
     private void maybeMigrateModelNameFromSentinel() {
@@ -950,7 +947,7 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
         maybeMigrateModelNameFromSentinel();
-        ArrayList<File> tfliteFiles = getFilesWithExtension(sdcardDataFolder, ".tflite");
+        ArrayList<File> tfliteFiles = WhisperGgmlModels.listDownloadedModelFiles(sdcardDataFolder);
         selectedTfliteFile = WhisperModelSelection.tfliteFileForMainScreen(sdcardDataFolder, sp, MULTI_LINGUAL_TOP_WORLD_SLOW);
         ArrayAdapter<File> tfliteAdapter = getFileArrayAdapter(tfliteFiles);
         spinnerTflite.setAdapter(tfliteAdapter);
@@ -1067,21 +1064,7 @@ public class MainActivity extends AppCompatActivity {
             public View getView(int position, View convertView, ViewGroup parent) {
                 View view = super.getView(position, convertView, parent);
                 TextView textView = view.findViewById(android.R.id.text1);
-                if ((getItem(position).getName()).equals(MULTI_LINGUAL_MODEL_SLOW))
-                    textView.setText(R.string.multi_lingual_slow);
-                else if ((getItem(position).getName()).equals(MULTI_LINGUAL_TOP_WORLD_SLOW))
-                    textView.setText(R.string.multi_lingual_slow);
-                else if ((getItem(position).getName()).equals(ENGLISH_ONLY_MODEL))
-                    textView.setText(R.string.english_only_fast);
-                else if ((getItem(position).getName()).equals(MULTI_LINGUAL_MODEL_FAST))
-                    textView.setText(R.string.multi_lingual_fast);
-                else if ((getItem(position).getName()).equals(MULTI_LINGUAL_EU_MODEL_FAST))
-                    textView.setText(R.string.multi_lingual_fast);
-                else if ((getItem(position).getName()).equals(MULTI_LINGUAL_TOP_WORLD_FAST))
-                    textView.setText(R.string.multi_lingual_fast);
-                else
-                    textView.setText(getItem(position).getName().substring(0, getItem(position).getName().length() - ".tflite".length()));
-
+                textView.setText(WhisperModelUi.spinnerLabel(MainActivity.this, getItem(position)));
                 return view;
             }
 
@@ -1089,21 +1072,7 @@ public class MainActivity extends AppCompatActivity {
             public View getDropDownView(int position, View convertView, ViewGroup parent) {
                 View view = super.getDropDownView(position, convertView, parent);
                 TextView textView = view.findViewById(android.R.id.text1);
-                if ((getItem(position).getName()).equals(MULTI_LINGUAL_MODEL_SLOW))
-                    textView.setText(R.string.multi_lingual_slow);
-                else if ((getItem(position).getName()).equals(MULTI_LINGUAL_TOP_WORLD_SLOW))
-                    textView.setText(R.string.multi_lingual_slow);
-                else if ((getItem(position).getName()).equals(ENGLISH_ONLY_MODEL))
-                    textView.setText(R.string.english_only_fast);
-                else if ((getItem(position).getName()).equals(MULTI_LINGUAL_MODEL_FAST))
-                    textView.setText(R.string.multi_lingual_fast);
-                else if ((getItem(position).getName()).equals(MULTI_LINGUAL_EU_MODEL_FAST))
-                    textView.setText(R.string.multi_lingual_fast);
-                else if ((getItem(position).getName()).equals(MULTI_LINGUAL_TOP_WORLD_FAST))
-                    textView.setText(R.string.multi_lingual_fast);
-                else
-                    textView.setText(getItem(position).getName().substring(0, getItem(position).getName().length() - ".tflite".length()));
-
+                textView.setText(WhisperModelUi.spinnerLabel(MainActivity.this, getItem(position)));
                 return view;
             }
         };

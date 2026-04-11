@@ -4,7 +4,6 @@ import static android.content.Intent.FLAG_ACTIVITY_NEW_TASK;
 import static com.whispertflite.MainActivity.ENGLISH_ONLY_VOCAB_FILE;
 import static com.whispertflite.MainActivity.MULTILINGUAL_VOCAB_FILE;
 import static com.whispertflite.MainActivity.MULTI_LINGUAL_TOP_WORLD_SLOW;
-import static com.whispertflite.MainActivity.ENGLISH_ONLY_MODEL_EXTENSION;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
@@ -35,6 +34,7 @@ import com.whispertflite.asr.OfflineAsrEngines;
 import com.whispertflite.asr.LiveTranscribePreferences;
 import com.whispertflite.asr.Recorder;
 import com.whispertflite.asr.Whisper;
+import com.whispertflite.asr.WhisperGgmlModels;
 import com.whispertflite.asr.WhisperLivePreviewLoop;
 import com.whispertflite.asr.WhisperModelSelection;
 import com.whispertflite.asr.WhisperResult;
@@ -524,7 +524,7 @@ public class WhisperInputMethodService extends InputMethodService {
 
     // Model initialization
     private void initModel(File modelFile) {
-        boolean isMultilingualModel = !(modelFile.getName().endsWith(ENGLISH_ONLY_MODEL_EXTENSION));
+        boolean isMultilingualModel = WhisperGgmlModels.isMultilingualModelFilename(modelFile.getName());
         String vocabFileName = isMultilingualModel ? MULTILINGUAL_VOCAB_FILE : ENGLISH_ONLY_VOCAB_FILE;
         File vocabFile = new File(sdcardDataFolder, vocabFileName);
 

@@ -1,7 +1,6 @@
 package com.whispertflite;
 
 import static android.content.Intent.FLAG_ACTIVITY_NEW_TASK;
-import static com.whispertflite.MainActivity.ENGLISH_ONLY_MODEL_EXTENSION;
 import static com.whispertflite.MainActivity.ENGLISH_ONLY_VOCAB_FILE;
 import static com.whispertflite.MainActivity.MULTILINGUAL_VOCAB_FILE;
 import static com.whispertflite.MainActivity.MULTI_LINGUAL_TOP_WORLD_SLOW;
@@ -303,7 +302,7 @@ public class WhisperRecognizeActivity extends AppCompatActivity {
 
     // Model initialization
     private void initModel(File modelFile, int langToken) {
-        boolean isMultilingualModel = !(modelFile.getName().endsWith(ENGLISH_ONLY_MODEL_EXTENSION));
+        boolean isMultilingualModel = com.whispertflite.asr.WhisperGgmlModels.isMultilingualModelFilename(modelFile.getName());
         String vocabFileName = isMultilingualModel ? MULTILINGUAL_VOCAB_FILE : ENGLISH_ONLY_VOCAB_FILE;
         File vocabFile = new File(sdcardDataFolder, vocabFileName);
 

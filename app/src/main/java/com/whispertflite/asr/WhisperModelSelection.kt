@@ -4,8 +4,9 @@ import android.content.SharedPreferences
 import java.io.File
 
 /**
- * Where the selected Whisper `.tflite` filename is stored. RecognitionService uses its own key so
- * the system voice-input screen can pick a model independently of the standalone app ([com.whispertflite.MainActivity]).
+ * Where the selected Whisper model **filename** is stored (`*.tflite` or `ggml-*.bin` / `*.gguf`;
+ * see [WhisperGgmlModels]). RecognitionService uses its own key so the system voice-input screen
+ * can pick a model independently of the standalone app ([com.whispertflite.MainActivity]).
  */
 object WhisperModelSelection {
     const val PREFS_KEY_MAIN_SCREEN = "modelName"
