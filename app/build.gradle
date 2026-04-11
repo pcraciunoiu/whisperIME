@@ -38,6 +38,22 @@ tasks.register('downloadSherpaOnnxAar') {
     }
 }
 
+// libsherpa-onnx-jni.so links against OrtGetApiBase in the libonnxruntime.so from the *same* sherpa release.
+// unpackMicrosoftOrtJni alone supplies MS ORT; pickFirst then leaves JNI ↔ runtime mismatched → UnsatisfiedLinkError.
+// Overwrite only libonnxruntime.so (not libonnxruntime4j_jni.so) with the copy from the sherpa AAR.
+tasks.register('overlaySherpaOnnxRuntime', Copy) {
+    dependsOn('downloadSherpaOnnxAar')
+    dependsOn('unpackMicrosoftOrtJni')
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+    from(zipTree(sherpaOnnxAarFile)) {
+        include 'jni/arm64-v8a/libonnxruntime.so'
+        include 'jni/armeabi-v7a/libonnxruntime.so'
+        include 'jni/x86/libonnxruntime.so'
+        include 'jni/x86_64/libonnxruntime.so'
+    }
+    into layout.buildDirectory.dir('microsoftOrtJni')
+}
+
 android {
     namespace 'com.whispertflite'
     compileSdk 35
@@ -112,8 +128,8 @@ android {
     }
 
     // Parakeet (MS ORT), moonshine-voice, and sherpa-onnx AAR each ship libonnxruntime.so — keep one copy.
-    // unpackMicrosoftOrtJni + sourceSets jniLibs below force a single MS runtime (see top of file).
-    // Sherpa JNI is built against an ORT in the AAR; at runtime we rely on MS ORT 1.23.x — verify on device.
+    // unpackMicrosoftOrtJni + overlaySherpaOnnxRuntime: MS unpack for libonnxruntime4j_jni.so, then sherpa’s
+    // libonnxruntime.so overwrites so libsherpa-onnx-jni resolves OrtGetApiBase (see overlaySherpaOnnxRuntime).
     packaging {
         jniLibs {
             pickFirsts += ['lib/arm64-v8a/libonnxruntime.so']
@@ -163,4 +179,5 @@ dependencies {
 tasks.named('preBuild').configure {
     dependsOn('unpackMicrosoftOrtJni')
     dependsOn('downloadSherpaOnnxAar')
+    dependsOn('overlaySherpaOnnxRuntime')
 }
