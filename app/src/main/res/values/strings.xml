@@ -15,7 +15,7 @@
     <string name="engine_whisper">Whisper (TFLite)</string>
     <string name="engine_parakeet">Parakeet (ONNX, English)</string>
     <string name="engine_moonshine">Moonshine Base (English)</string>
-    <string name="engine_sherpa">Sherpa-ONNX (English streaming)</string>
+    <string name="engine_sherpa">Sherpa-ONNX (streaming)</string>
     <string name="select_sherpa_model">Sherpa model:</string>
     <string name="sherpa_model_zipformer_en_20m">Zipformer EN 20M (fast)</string>
     <string name="sherpa_model_zipformer_en_202306">Zipformer EN Jun 2023 (larger)</string>
@@ -24,7 +24,7 @@
     <string name="sherpa_punct_notes_lstm_en">Word-piece; often unpunctuated — offline final polish recommended.</string>
     <string name="download_model_text_parakeet">\nDownload Parakeet ONNX models from Hugging Face (~650 MB). English streaming.</string>
     <string name="download_model_text_sherpa">\nSherpa-ONNX: pick a model variant above, then tap Download to fetch ONNX files from Hugging Face into app storage (large; Wi‑Fi recommended). You can still copy files manually — see docs/offline-asr-research.md.</string>
-    <string name="sherpa_punct_enhance_checkbox">Enhance Sherpa final text (offline punctuation &amp; casing)</string>
+    <string name="sherpa_punct_enhance_checkbox">Add punctuation &amp; casing</string>
     <string name="live_transcribe">Transcribe live</string>
     <string name="live_transcribe_hint">While you hold the button: Parakeet, Moonshine, and Sherpa stream partial text; Whisper updates partial text periodically (on-device, throttled). Final text still uses the full recording when you release.</string>
     <string name="models_missing_open_download">Models missing. Opening download screen.</string>
@@ -82,18 +82,16 @@
     <string name="parakeet_start_failed">Could not start Parakeet (permission or models).</string>
     <string name="sherpa_models_missing">Sherpa-ONNX model files are missing for the selected variant. See the download screen and docs/offline-asr-research.md.</string>
     <string name="sherpa_start_failed">Could not start Sherpa (permission or models).</string>
+    <string name="sherpa_native_load_failed">Sherpa native libraries failed to load. Reinstall the app after a full build, or check logcat for UnsatisfiedLinkError (often ONNX / JNI mismatch).</string>
     <string name="voice_undo_phrases_label">Undo last voice edit (comma-separated phrases)</string>
     <string name="voice_newline_phrases_label">New line (comma-separated phrases)</string>
     <string name="voice_undo_phrases_default" translatable="false">scratch that, scratched that</string>
     <string name="voice_newline_phrases_default" translatable="false">new line</string>
-    <string name="sherpa_spike_title" translatable="false">Sherpa-ONNX spike</string>
-    <string name="sherpa_spike_debug_entry" translatable="false">Sherpa spike (debug)</string>
-    <string name="sherpa_spike_record_start">Start recording</string>
-    <string name="sherpa_spike_record_stop">Stop</string>
-    <string name="sherpa_spike_model_ok" translatable="false">Model dir OK:\n%1$s</string>
-    <string name="sherpa_spike_model_missing" translatable="false">Models missing. Copy HF repo into:\n%1$s\nSee docs/offline-asr-research.md (Sherpa spike).</string>
-    <string name="sherpa_spike_ready" translatable="false">Recognizer initialized.</string>
-    <string name="sherpa_spike_init_failed" translatable="false">Init failed: %1$s</string>
-    <string name="sherpa_spike_not_initialized" translatable="false">Recognizer not initialized.</string>
-    <string name="sherpa_spike_mic_failed" translatable="false">Could not open microphone.</string>
+    <string name="sherpa_model_zipformer_en_kroko_2025">Zipformer EN Kroko Aug 2025</string>
+    <string name="sherpa_model_nemo_fast_conformer_en_80ms">NeMo Fast Conformer EN 80ms (fast CTC)</string>
+    <string name="sherpa_model_nemo_fast_conformer_en_480ms">NeMo Fast Conformer EN 480ms (CTC)</string>
+    <string name="sherpa_model_nemo_fast_conformer_en_1040ms">NeMo Fast Conformer EN 1040ms (CTC, longer context)</string>
+    <string name="sherpa_model_nemotron_speech_en_0_6b_int8">Nemotron Speech EN 0.6B int8 (large / accuracy)</string>
+    <string name="sherpa_punct_notes_nemo_ctc_en">Streaming CTC; punctuation may be sparse — optional offline polish on final text.</string>
+    <string name="sherpa_punct_notes_nemotron_en">Large streaming model; slower and heavy download — best for accuracy over speed.</string>
 </resources>
