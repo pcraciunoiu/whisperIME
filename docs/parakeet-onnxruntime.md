@@ -22,6 +22,8 @@ Verify after a build: merged `lib/arm64-v8a/libonnxruntime.so` should match the 
 
 After a debug build, merged `lib/arm64-v8a/libonnxruntime.so` must match the Microsoft AAR referenced in Gradle (same version as `implementation` / `ortJniUnpack`).
 
+**Sherpa-ONNX:** `libsherpa-onnx-jni.so` from the k2-fsa AAR expects a **different** ONNX Runtime build than Moonshine’s `OrtGetApiBase@VERS_1.23.0` line. Overwriting the single `libonnxruntime.so` with Sherpa’s copy fixed Sherpa but broke Moonshine/Parakeet. The build now ships **Microsoft’s** `libonnxruntime.so` (unchanged) **plus** Sherpa’s runtime as `libonnxruntime_sherpa.so`, with **`prepareSherpaJniWithRenamedOrt`** patching the Sherpa JNI `.so` (`patchelf --replace-needed`) to load the renamed library.
+
 ## Secondary fix
 
 [`ParakeetStreamingRecorder`](../app/src/main/java/com/whispertflite/parakeet/ParakeetStreamingRecorder.kt) sets `engine = eng` immediately after successful `ParakeetStreamingEngine` construction so `stop()` can snapshot/close if the user releases during `AudioRecord` setup (avoids leaked sessions and empty finals).

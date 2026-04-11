@@ -15,9 +15,25 @@
     <string name="engine_whisper">Whisper (TFLite)</string>
     <string name="engine_parakeet">Parakeet (ONNX, English)</string>
     <string name="engine_moonshine">Moonshine Base (English)</string>
+    <string name="engine_sherpa">Sherpa-ONNX (streaming)</string>
+    <string name="select_sherpa_model">Sherpa model:</string>
+    <string name="select_sherpa_punct_model">Final punctuation:</string>
+    <string name="sherpa_punct_model_heuristics">Heuristics (built-in, fast)</string>
+    <string name="sherpa_punct_model_online_en_int8">ONNX English CNN-BiLSTM (int8)</string>
+    <string name="sherpa_punct_model_ct_zh_en_int8">ONNX CT Chinese+English (int8)</string>
+    <string name="sherpa_punct_model_notes_heuristics">No extra download. Adds light casing and a period when needed.</string>
+    <string name="sherpa_punct_model_notes_online_en">k2-fsa Edge-Punct style; download ~35 MB. English text.</string>
+    <string name="sherpa_punct_model_notes_ct_zh_en">k2-fsa CT transformer; download ~75 MB. Chinese and English mixed text.</string>
+    <string name="sherpa_model_zipformer_en_20m">Zipformer EN 20M (fast)</string>
+    <string name="sherpa_model_zipformer_en_202306">Zipformer EN Jun 2023 (larger)</string>
+    <string name="sherpa_model_lstm_en">LSTM EN (smaller / baseline)</string>
+    <string name="sherpa_punct_notes_zipformer_en">Char-level; punctuation may be sparse — app can add light offline polish on final text.</string>
+    <string name="sherpa_punct_notes_lstm_en">Word-piece; often unpunctuated — offline final polish recommended.</string>
     <string name="download_model_text_parakeet">\nDownload Parakeet ONNX models from Hugging Face (~650 MB). English streaming.</string>
+    <string name="download_model_text_sherpa">\nSherpa-ONNX: pick a model variant above, then tap Download to fetch ONNX files from Hugging Face into app storage (large; Wi‑Fi recommended). If you choose a neural punctuation model, the same download also fetches that tarball from k2-fsa releases. You can still copy files manually — see docs/offline-asr-research.md.</string>
+    <string name="sherpa_punct_enhance_checkbox">Add punctuation &amp; casing</string>
     <string name="live_transcribe">Transcribe live</string>
-    <string name="live_transcribe_hint">While you hold the button: Parakeet and Moonshine stream partial text; Whisper updates partial text periodically (on-device, throttled). Final text still uses the full recording when you release.</string>
+    <string name="live_transcribe_hint">While you hold the button: Parakeet, Moonshine, and Sherpa stream partial text; Whisper updates partial text periodically (on-device, throttled). Final text still uses the full recording when you release.</string>
     <string name="models_missing_open_download">Models missing. Opening download screen.</string>
     <string name="select_model">Model:</string>
     <string name="main_model_moonshine">Moonshine Base (English)</string>
@@ -71,8 +87,18 @@
     <string name="whisper_model_missing">Whisper TFLite model is not installed. Open the download screen and fetch Whisper models.</string>
     <string name="parakeet_models_missing">Parakeet ONNX models are not installed. Download them from the setup screen.</string>
     <string name="parakeet_start_failed">Could not start Parakeet (permission or models).</string>
+    <string name="sherpa_models_missing">Sherpa-ONNX model files are missing for the selected variant. See the download screen and docs/offline-asr-research.md.</string>
+    <string name="sherpa_start_failed">Could not start Sherpa (permission or models).</string>
+    <string name="sherpa_native_load_failed">Sherpa native libraries failed to load. Reinstall the app after a full build, or check logcat for UnsatisfiedLinkError (often ONNX / JNI mismatch).</string>
     <string name="voice_undo_phrases_label">Undo last voice edit (comma-separated phrases)</string>
     <string name="voice_newline_phrases_label">New line (comma-separated phrases)</string>
     <string name="voice_undo_phrases_default" translatable="false">scratch that, scratched that</string>
     <string name="voice_newline_phrases_default" translatable="false">new line</string>
+    <string name="sherpa_model_zipformer_en_kroko_2025">Zipformer EN Kroko Aug 2025</string>
+    <string name="sherpa_model_nemo_fast_conformer_en_80ms">NeMo Fast Conformer EN 80ms (fast CTC)</string>
+    <string name="sherpa_model_nemo_fast_conformer_en_480ms">NeMo Fast Conformer EN 480ms (CTC)</string>
+    <string name="sherpa_model_nemo_fast_conformer_en_1040ms">NeMo Fast Conformer EN 1040ms (CTC, longer context)</string>
+    <string name="sherpa_model_nemotron_speech_en_0_6b_int8">Nemotron Speech EN 0.6B int8 (large / accuracy)</string>
+    <string name="sherpa_punct_notes_nemo_ctc_en">Streaming CTC; punctuation may be sparse — optional offline polish on final text.</string>
+    <string name="sherpa_punct_notes_nemotron_en">Large streaming model; slower and heavy download — best for accuracy over speed.</string>
 </resources>

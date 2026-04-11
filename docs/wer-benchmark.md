@@ -1,12 +1,12 @@
 # Word Error Rate (WER) benchmark (offline)
 
-Use this to compare **on-device** engines (Whisper TFLite, Parakeet, Moonshine) on the **same audio** with a **reference transcript**. No cloud STT.
+Use this to compare **on-device** engines (Whisper TFLite, Parakeet, Moonshine, Sherpa-ONNX) on the **same audio** with a **reference transcript**. No cloud STT.
 
 ## What you need
 
 1. **Reference text** — gold transcript for the clip (plain UTF-8 `.txt`).
 2. **Hypothesis text** — what each engine produced (copy from the app or save from a test harness).
-3. **Python 3** with [`jiwer`](https://github.com/jitsi/jiwer): `pip install jiwer`
+3. **Python 3** with `[jiwer](https://github.com/jitsi/jiwer)`: `pip install jiwer`
 
 Optional: raw **WAV** (16 kHz mono is typical for these pipelines) kept alongside the transcript so you can re-run the same clip after model or code changes.
 
@@ -43,3 +43,19 @@ Outputs **WER** and **CER** (character error rate) on stderr/stdout.
 ## Same constraint as the app
 
 All recognition must be **local** after models are installed. Comparing against cloud transcripts is fine for references; engine output must remain offline.
+
+## Four-engine smoke checklist (arm64 device)
+
+After a Sherpa or ORT packaging change, spot-check **all** engines on a **real arm64** phone (not only an emulator):
+
+
+| Check                                                      | Whisper | Parakeet | Moonshine | Sherpa |
+| ---------------------------------------------------------- | ------- | -------- | --------- | ------ |
+| Main screen hold-to-talk                                   |         |          |           |        |
+| System voice input (`WhisperRecognitionService`)           |         |          |           |        |
+| IME hold-to-talk                                           |         |          |           |        |
+| Live partials (if enabled)                                 |         |          |           |        |
+| Final text readable; Sherpa: punctuation polish acceptable |         |          |           |        |
+
+
+**Rough RTF / latency:** note wall time or log timestamps for a short phrase. **WER:** run `scripts/wer_benchmark.py` on the same clip for engines you care about.

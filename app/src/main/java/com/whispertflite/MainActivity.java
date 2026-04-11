@@ -54,6 +54,11 @@ import com.whispertflite.moonshine.MoonshineHoldRecorder;
 import com.whispertflite.moonshine.MoonshineModelFiles;
 import com.whispertflite.moonshine.MoonshinePocActivity;
 import com.whispertflite.moonshine.MoonshinePreferences;
+import com.whispertflite.sherpa.SherpaCatalogEntry;
+import com.whispertflite.sherpa.SherpaPunctCatalogEntry;
+import com.whispertflite.sherpa.SherpaPreferences;
+import com.whispertflite.sherpa.SherpaPunctuationEngine;
+import com.whispertflite.sherpa.SherpaStreamingRecorder;
 import com.whispertflite.parakeet.ParakeetEnginePool;
 import com.whispertflite.parakeet.ParakeetModelFiles;
 import com.whispertflite.parakeet.ParakeetStreamingRecorder;
@@ -105,6 +110,7 @@ public class MainActivity extends AppCompatActivity {
     private Whisper mWhisper = null;
     private MoonshineHoldRecorder moonshineMainRecorder = null;
     private ParakeetStreamingRecorder parakeetMainRecorder = null;
+    private SherpaStreamingRecorder sherpaMainRecorder = null;
     private WhisperLivePreviewLoop mainWhisperLiveLoop = null;
     /** Whisper hold used live partials for this utterance (cleared when final result is applied). */
     private boolean whisperSessionLiveTranscribe = false;
@@ -114,8 +120,14 @@ public class MainActivity extends AppCompatActivity {
     private File selectedTfliteFile = null;
     private SharedPreferences sp = null;
     private Spinner spnrAsrEngine;
+    private String[] mAsrEngineValues;
     private LinearLayout layoutWhisperModels;
+    private LinearLayout layoutSherpaModels;
+    private LinearLayout layoutSherpaOptions;
     private Spinner spinnerTflite;
+    private Spinner spnrSherpaModel;
+    private CheckBox cbSherpaPunctEnhance;
+    private Spinner spnrSherpaPunctModel;
     private CountDownTimer countDownTimer;
     private Spinner spinnerLanguage;
     /** Retained so {@link #refreshWhisperTfliteSpinner()} can update language rules after download. */
@@ -140,6 +152,10 @@ public class MainActivity extends AppCompatActivity {
             parakeetMainRecorder.stop();
             parakeetMainRecorder = null;
         }
+        if (sherpaMainRecorder != null) {
+            sherpaMainRecorder.stop();
+            sherpaMainRecorder = null;
+        }
         deinitModel();
         deinitTTS();
         super.onDestroy();
@@ -149,6 +165,37 @@ public class MainActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
         refreshWhisperTfliteSpinner();
+        syncAsrEngineSpinnerToPrefs();
+        syncSherpaPunctSpinnerToPrefs();
+    }
+
+    private void syncAsrEngineSpinnerToPrefs() {
+        if (spnrAsrEngine == null || mAsrEngineValues == null) {
+            return;
+        }
+        String cur = AsrEnginePreferences.mainEngine(this);
+        for (int i = 0; i < mAsrEngineValues.length; i++) {
+            if (mAsrEngineValues[i].equals(cur)) {
+                spnrAsrEngine.setSelection(i, false);
+                break;
+            }
+        }
+    }
+
+    private void syncSherpaPunctSpinnerToPrefs() {
+        if (spnrSherpaPunctModel == null) {
+            return;
+        }
+        String curId = SherpaPreferences.selectedPunctModelId(this);
+        java.util.List<SherpaPunctCatalogEntry> list = SherpaPunctCatalogEntry.ENTRIES;
+        for (int i = 0; i < list.size(); i++) {
+            if (list.get(i).getId().equals(curId)) {
+                if (spnrSherpaPunctModel.getSelectedItemPosition() != i) {
+                    spnrSherpaPunctModel.setSelection(i, false);
+                }
+                break;
+            }
+        }
     }
 
     @Override
@@ -226,16 +273,26 @@ public class MainActivity extends AppCompatActivity {
         sdcardDataFolder = this.getExternalFilesDir(null);
 
         layoutWhisperModels = findViewById(R.id.layout_whisper_models);
+        layoutSherpaModels = findViewById(R.id.layout_sherpa_models);
+        layoutSherpaOptions = findViewById(R.id.layout_sherpa_options);
+        spnrSherpaModel = findViewById(R.id.spnrSherpaModel);
+        bindSherpaModelSpinner();
+        cbSherpaPunctEnhance = findViewById(R.id.cbSherpaPunctEnhance);
+        cbSherpaPunctEnhance.setChecked(SherpaPreferences.isPunctuationEnhanceEnabled(this));
+        cbSherpaPunctEnhance.setOnCheckedChangeListener((buttonView, isChecked) ->
+                SherpaPreferences.setPunctuationEnhanceEnabled(MainActivity.this, isChecked));
+        spnrSherpaPunctModel = findViewById(R.id.spnrSherpaPunctModel);
+        bindSherpaPunctSpinner();
         spnrAsrEngine = findViewById(R.id.spnrAsrEngine);
         ArrayAdapter<CharSequence> engineAdapter = ArrayAdapter.createFromResource(this,
                 R.array.asr_engine_entries, android.R.layout.simple_spinner_item);
         engineAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         spnrAsrEngine.setAdapter(engineAdapter);
-        String[] engineValues = getResources().getStringArray(R.array.asr_engine_entry_values);
+        mAsrEngineValues = getResources().getStringArray(R.array.asr_engine_entry_values);
         String currentEngine = AsrEnginePreferences.mainEngine(this);
         int engineSel = 0;
-        for (int i = 0; i < engineValues.length; i++) {
-            if (engineValues[i].equals(currentEngine)) {
+        for (int i = 0; i < mAsrEngineValues.length; i++) {
+            if (mAsrEngineValues[i].equals(currentEngine)) {
                 engineSel = i;
                 break;
             }
@@ -250,13 +307,13 @@ public class MainActivity extends AppCompatActivity {
         } else {
             deinitModel();
         }
-        applyEngineUiMode(engineValues[engineSel]);
+        applyEngineUiMode(mAsrEngineValues[engineSel]);
         maybePreheatParakeet();
 
         spnrAsrEngine.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                String eng = engineValues[position];
+                String eng = mAsrEngineValues[position];
                 AsrEnginePreferences.setMainEngine(MainActivity.this, eng);
                 if (AsrEnginePreferences.WHISPER.equals(eng)) {
                     initModel();
@@ -358,7 +415,7 @@ public class MainActivity extends AppCompatActivity {
                         long elapsed = System.currentTimeMillis() - startTime;
                         boolean liveNow = liveTranscribe.isChecked();
                         runOnUiThread(() -> {
-                            finishMoonshineOrParakeetHold(fin, liveNow, elapsed, true);
+                            finishStreamingEngineHold(fin, liveNow, elapsed, getString(R.string.moonshine_asr_model));
                         });
                     }
                 }
@@ -415,7 +472,67 @@ public class MainActivity extends AppCompatActivity {
                         long elapsed = System.currentTimeMillis() - startTime;
                         boolean liveNow = liveTranscribe.isChecked();
                         runOnUiThread(() -> {
-                            finishMoonshineOrParakeetHold(fin, liveNow, elapsed, false);
+                            finishStreamingEngineHold(fin, liveNow, elapsed, "Parakeet (English)");
+                        });
+                    }
+                }
+                return true;
+            }
+            if (AsrEnginePreferences.SHERPA.equals(eng)) {
+                boolean live = liveTranscribe.isChecked();
+                if (event.getAction() == MotionEvent.ACTION_DOWN) {
+                    mainVoiceCommandConsumed = false;
+                    runOnUiThread(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background_pressed));
+                    if (!ensureEngineModelsReady()) return true;
+                    HapticFeedback.vibrate(this);
+                    final String liveAppendPrefix = (live && append.isChecked())
+                            ? tvResult.getText().toString()
+                            : null;
+                    mainLiveAppendPrefix = liveAppendPrefix;
+                    if (!append.isChecked()) runOnUiThread(() -> tvResult.setText(""));
+                    startTime = System.currentTimeMillis();
+                    sherpaMainRecorder = new SherpaStreamingRecorder(mContext, sdcardDataFolder, mainHandler,
+                            partial -> {
+                                if (live) {
+                                    runOnUiThread(() -> {
+                                        if (partial == null || partial.isEmpty()) {
+                                            return;
+                                        }
+                                        if (handleLivePartialVoiceCommand(partial, liveAppendPrefix)) return;
+                                        if (liveAppendPrefix != null) {
+                                            tvResult.setText(joinLivePrefixWithPartial(liveAppendPrefix, partial));
+                                        } else {
+                                            tvResult.setText(partial);
+                                        }
+                                        moveCursorToEnd(tvResult);
+                                    });
+                                }
+                            });
+                    if (!sherpaMainRecorder.start()) {
+                        Toast.makeText(this, R.string.sherpa_start_failed, Toast.LENGTH_SHORT).show();
+                        sherpaMainRecorder = null;
+                    }
+                    runOnUiThread(() -> processingBar.setProgress(100));
+                    countDownTimer = new CountDownTimer(RecordingTimings.HOLD_TO_TALK_MAX_MS, 1000) {
+                        @Override
+                        public void onTick(long l) {
+                            runOnUiThread(() -> processingBar.setProgress((int) (l / RecordingTimings.COUNTDOWN_PROGRESS_DIVISOR_MS)));
+                        }
+                        @Override
+                        public void onFinish() {}
+                    };
+                    countDownTimer.start();
+                } else if (event.getAction() == MotionEvent.ACTION_UP) {
+                    runOnUiThread(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background));
+                    if (countDownTimer != null) countDownTimer.cancel();
+                    runOnUiThread(() -> processingBar.setProgress(0));
+                    if (sherpaMainRecorder != null) {
+                        String fin = sherpaMainRecorder.stop();
+                        sherpaMainRecorder = null;
+                        long elapsed = System.currentTimeMillis() - startTime;
+                        boolean liveNow = liveTranscribe.isChecked();
+                        runOnUiThread(() -> {
+                            finishStreamingEngineHold(fin, liveNow, elapsed, getString(R.string.engine_sherpa));
                         });
                     }
                 }
@@ -628,7 +745,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
-     * Final transcript after Whisper live partials (same rules as {@link #finishMoonshineOrParakeetHold} live branch).
+     * Final transcript after Whisper live partials (same rules as {@link #finishStreamingEngineHold} live branch).
      */
     private void finishMainActivityWhisperLiveHold(String fin) {
         Set<String> undo = VoiceCommandPreferences.normalizedUndoPhrases(sp);
@@ -733,7 +850,7 @@ public class MainActivity extends AppCompatActivity {
         return true;
     }
 
-    private void finishMoonshineOrParakeetHold(String fin, boolean liveNow, long elapsed, boolean moonshine) {
+    private void finishStreamingEngineHold(String fin, boolean liveNow, long elapsed, String asrEngineLabel) {
         Set<String> undo = VoiceCommandPreferences.normalizedUndoPhrases(sp);
         Set<String> nl = VoiceCommandPreferences.normalizedNewlinePhrases(sp);
         if (!liveNow) {
@@ -791,9 +908,7 @@ public class MainActivity extends AppCompatActivity {
             mainLiveAppendPrefix = null;
         }
         tvStatus.setText(getString(R.string.processing_done) + elapsed + "\u2009ms\n"
-                + getString(R.string.language) + " " + (moonshine
-                ? getString(R.string.moonshine_asr_model)
-                : "Parakeet (English)"));
+                + getString(R.string.language) + " " + asrEngineLabel);
     }
 
     // Model initialization
@@ -992,11 +1107,75 @@ public class MainActivity extends AppCompatActivity {
     private void applyEngineUiMode(String engine) {
         boolean whisper = AsrEnginePreferences.WHISPER.equals(engine);
         layoutWhisperModels.setVisibility(whisper ? View.VISIBLE : View.GONE);
+        layoutSherpaModels.setVisibility(AsrEnginePreferences.SHERPA.equals(engine) ? View.VISIBLE : View.GONE);
+        layoutSherpaOptions.setVisibility(AsrEnginePreferences.SHERPA.equals(engine) ? View.VISIBLE : View.GONE);
         boolean liveOk = AsrEnginePreferences.PARAKEET.equals(engine)
                 || AsrEnginePreferences.MOONSHINE.equals(engine)
+                || AsrEnginePreferences.SHERPA.equals(engine)
                 || AsrEnginePreferences.WHISPER.equals(engine);
         liveTranscribe.setEnabled(liveOk);
         liveTranscribe.setAlpha(liveOk ? 1f : 0.45f);
+    }
+
+    private void bindSherpaModelSpinner() {
+        java.util.List<String> labels = new java.util.ArrayList<>();
+        for (SherpaCatalogEntry e : SherpaCatalogEntry.ENTRIES) {
+            labels.add(getString(e.getLabelRes()));
+        }
+        ArrayAdapter<String> ad = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, labels);
+        ad.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        spnrSherpaModel.setAdapter(ad);
+        String curId = SherpaPreferences.selectedCatalogId(this);
+        int sel = 0;
+        java.util.List<SherpaCatalogEntry> list = SherpaCatalogEntry.ENTRIES;
+        for (int i = 0; i < list.size(); i++) {
+            if (list.get(i).getId().equals(curId)) {
+                sel = i;
+                break;
+            }
+        }
+        spnrSherpaModel.setSelection(sel, false);
+        spnrSherpaModel.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                SherpaPreferences.setSelectedCatalogId(MainActivity.this, list.get(position).getId());
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {
+            }
+        });
+    }
+
+    private void bindSherpaPunctSpinner() {
+        java.util.List<String> labels = new java.util.ArrayList<>();
+        for (SherpaPunctCatalogEntry e : SherpaPunctCatalogEntry.ENTRIES) {
+            labels.add(getString(e.getLabelRes()));
+        }
+        ArrayAdapter<String> ad = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, labels);
+        ad.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        spnrSherpaPunctModel.setAdapter(ad);
+        String curId = SherpaPreferences.selectedPunctModelId(this);
+        int sel = 0;
+        java.util.List<SherpaPunctCatalogEntry> list = SherpaPunctCatalogEntry.ENTRIES;
+        for (int i = 0; i < list.size(); i++) {
+            if (list.get(i).getId().equals(curId)) {
+                sel = i;
+                break;
+            }
+        }
+        spnrSherpaPunctModel.setSelection(sel, false);
+        spnrSherpaPunctModel.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                SherpaPreferences.setSelectedPunctModelId(MainActivity.this, list.get(position).getId());
+                SherpaPunctuationEngine.invalidate();
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {
+            }
+        });
     }
 
     private void openDownloadForEngine(String engine) {
@@ -1047,6 +1226,16 @@ public class MainActivity extends AppCompatActivity {
             if (!MoonshineModelFiles.hasMoonshineBaseModelFilesOnDisk(mContext)) {
                 Toast.makeText(this, R.string.moonshine_models_missing, Toast.LENGTH_LONG).show();
                 openDownloadForEngine(AsrEnginePreferences.MOONSHINE);
+                return false;
+            }
+            return true;
+        }
+        if (AsrEnginePreferences.SHERPA.equals(eng)) {
+            if (sdcardDataFolder == null
+                    || !com.whispertflite.sherpa.SherpaModelFiles.allFilesPresentForSelectedVariant(
+                            sdcardDataFolder, this)) {
+                Toast.makeText(this, R.string.sherpa_models_missing, Toast.LENGTH_LONG).show();
+                openDownloadForEngine(AsrEnginePreferences.SHERPA);
                 return false;
             }
             return true;
@@ -1170,6 +1359,10 @@ public class MainActivity extends AppCompatActivity {
         if (parakeetMainRecorder != null) {
             parakeetMainRecorder.stop();
             parakeetMainRecorder = null;
+        }
+        if (sherpaMainRecorder != null) {
+            sherpaMainRecorder.stop();
+            sherpaMainRecorder = null;
         }
         if (mWhisper != null && mWhisper.isInProgress()) mWhisper.stop();
     }

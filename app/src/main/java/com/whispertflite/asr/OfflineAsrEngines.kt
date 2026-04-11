@@ -4,6 +4,7 @@ import android.content.Context
 import com.whispertflite.AsrEnginePreferences
 import com.whispertflite.moonshine.MoonshineModelFiles
 import com.whispertflite.parakeet.ParakeetModelFiles
+import com.whispertflite.sherpa.SherpaModelFiles
 import java.io.File
 
 /**
@@ -33,5 +34,14 @@ object OfflineAsrEngines {
             return false
         }
         return ParakeetModelFiles.allOnnxPresent(modelsDir)
+    }
+
+    @JvmStatic
+    fun sherpaSelectedAndReady(context: android.content.Context, modelsDir: File?): Boolean {
+        if (modelsDir == null) return false
+        if (!AsrEnginePreferences.SHERPA.equals(AsrEnginePreferences.mainEngine(context))) {
+            return false
+        }
+        return SherpaModelFiles.allFilesPresentForSelectedVariant(modelsDir, context)
     }
 }

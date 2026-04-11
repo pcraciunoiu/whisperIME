@@ -47,10 +47,12 @@
         <item>whisper</item>
         <item>parakeet</item>
         <item>moonshine</item>
+        <item>sherpa</item>
     </string-array>
     <string-array name="asr_engine_entries">
         <item>@string/engine_whisper</item>
         <item>@string/engine_parakeet</item>
         <item>@string/engine_moonshine</item>
+        <item>@string/engine_sherpa</item>
     </string-array>
 </resources>

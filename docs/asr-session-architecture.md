@@ -18,7 +18,7 @@ This matches the refactor audit: *extract shared ASR/session logic with RS as th
 
 | Piece | Role |
 |--------|------|
-| [`OfflineAsrEngines`](../app/src/main/java/com/whispertflite/asr/OfflineAsrEngines.kt) | “Engine X selected **and** models present” for routing (Moonshine/Parakeet vs Whisper). |
+| [`OfflineAsrEngines`](../app/src/main/java/com/whispertflite/asr/OfflineAsrEngines.kt) | “Engine X selected **and** models present” for routing (Moonshine / Parakeet / Sherpa vs Whisper). |
 | [`LiveTranscribePreferences`](../app/src/main/java/com/whispertflite/asr/LiveTranscribePreferences.kt) | Single preference key for live partials across all surfaces. |
 | [`WhisperModelSelection`](../app/src/main/java/com/whispertflite/asr/WhisperModelSelection.kt) | Whisper `.tflite` basename: main screen vs RecognitionService settings. |
 | [`WhisperLivePreviewLoop`](../app/src/main/java/com/whispertflite/asr/WhisperLivePreviewLoop.java) | Throttled on-device Whisper previews from [`Recorder`](../app/src/main/java/com/whispertflite/asr/Recorder.java) PCM snapshots. |
@@ -27,3 +27,9 @@ This matches the refactor audit: *extract shared ASR/session logic with RS as th
 
 - [offline-asr-research.md](offline-asr-research.md) — shipped engines and research notes.
 - [parakeet-onnxruntime.md](parakeet-onnxruntime.md) — ORT merge with Moonshine.
+
+### Sherpa-ONNX (fourth engine)
+
+**Production path:** [`AsrEnginePreferences.SHERPA`](../app/src/main/java/com/whispertflite/AsrEnginePreferences.kt) + [`SherpaModelCatalog`](../app/src/main/java/com/whispertflite/sherpa/SherpaModelCatalog.kt) (built-in `getModelConfig` types). [`WhisperRecognitionService`](../app/src/main/java/com/whispertflite/WhisperRecognitionService.java) routes **Moonshine → Parakeet → Sherpa → Whisper (TFLite)** when each “selected and ready” gate matches. Streaming hold uses [`SherpaStreamingRecorder`](../app/src/main/java/com/whispertflite/sherpa/SherpaStreamingRecorder.kt). **Punctuation:** optional offline final-text polish via [`SherpaPunctuationPostProcessor`](../app/src/main/java/com/whispertflite/sherpa/SherpaPunctuationPostProcessor.kt) (toggle `SherpaPreferences.KEY_PUNCT_ENHANCE`).
+
+**ORT:** Microsoft ONNX Runtime is unpacked for Moonshine/Parakeet; Sherpa uses a second copy as `libonnxruntime_sherpa.so` with a patched `DT_NEEDED` on `libsherpa-onnx-jni.so` — see [`app/build.gradle`](../app/build.gradle) and [offline-asr-research.md](offline-asr-research.md).

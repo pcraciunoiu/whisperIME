@@ -30,10 +30,10 @@ class MoonshinePocActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        ThemeUtils.setStatusBarAppearance(this)
         MoonshinePreferences.migrateFromParakeetKeys(this)
         binding = ActivityParakeetPocBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        ThemeUtils.setStatusBarAppearance(this)
 
         val sp = PreferenceManager.getDefaultSharedPreferences(this)
         binding.switchParakeetMain.isChecked =

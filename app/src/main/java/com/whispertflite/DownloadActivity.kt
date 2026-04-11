@@ -17,6 +17,12 @@ import com.whispertflite.parakeet.ParakeetDownloader
 import com.whispertflite.parakeet.ParakeetEnginePool
 import com.whispertflite.parakeet.ParakeetModelFiles
 import com.whispertflite.parakeet.ParakeetPreferences
+import com.whispertflite.sherpa.SherpaCatalogEntry
+import com.whispertflite.sherpa.SherpaDownloader
+import com.whispertflite.sherpa.SherpaModelFiles
+import com.whispertflite.sherpa.SherpaPreferences
+import com.whispertflite.sherpa.SherpaPunctCatalogEntry
+import com.whispertflite.sherpa.SherpaPunctuationDownloader
 import com.whispertflite.utils.Downloader
 import com.whispertflite.utils.ThemeUtils
 
@@ -55,10 +61,59 @@ class DownloadActivity : AppCompatActivity() {
                 val eng = values.getOrElse(position) { AsrEnginePreferences.WHISPER }
                 AsrEnginePreferences.setSetupWizardEngine(this@DownloadActivity, eng)
                 applyWizardDescription(eng)
+                updateSherpaVariantUi(eng)
             }
 
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
+        bindSherpaVariantSpinner()
+        bindSherpaPunctSpinner()
+        updateSherpaVariantUi(initial)
+    }
+
+    private fun bindSherpaVariantSpinner() {
+        val labels = SherpaCatalogEntry.ENTRIES.map { getString(it.labelRes) }
+        val ad = android.widget.ArrayAdapter(this, android.R.layout.simple_spinner_item, labels)
+        ad.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        binding?.spinnerSherpaVariant?.adapter = ad
+        val cur = SherpaPreferences.selectedCatalogId(this)
+        val idx = SherpaCatalogEntry.ENTRIES.indexOfFirst { it.id == cur }.takeIf { it >= 0 } ?: 0
+        binding?.spinnerSherpaVariant?.setSelection(idx, false)
+        binding?.spinnerSherpaVariant?.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                val idStr = SherpaCatalogEntry.ENTRIES.getOrNull(position)?.id ?: return
+                SherpaPreferences.setSelectedCatalogId(this@DownloadActivity, idStr)
+            }
+
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+    }
+
+    private fun bindSherpaPunctSpinner() {
+        val labels = SherpaPunctCatalogEntry.ENTRIES.map { getString(it.labelRes) }
+        val ad = android.widget.ArrayAdapter(this, android.R.layout.simple_spinner_item, labels)
+        ad.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        binding?.spinnerSherpaPunct?.adapter = ad
+        val cur = SherpaPreferences.selectedPunctModelId(this)
+        val idx = SherpaPunctCatalogEntry.ENTRIES.indexOfFirst { it.id == cur }.takeIf { it >= 0 } ?: 0
+        binding?.spinnerSherpaPunct?.setSelection(idx, false)
+        binding?.spinnerSherpaPunct?.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                val idStr = SherpaPunctCatalogEntry.ENTRIES.getOrNull(position)?.id ?: return
+                SherpaPreferences.setSelectedPunctModelId(this@DownloadActivity, idStr)
+            }
+
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+    }
+
+    private fun updateSherpaVariantUi(engine: String) {
+        val show = AsrEnginePreferences.SHERPA == engine
+        val vis = if (show) View.VISIBLE else View.GONE
+        binding?.labelSherpaVariant?.visibility = vis
+        binding?.spinnerSherpaVariant?.visibility = vis
+        binding?.labelSherpaPunct?.visibility = vis
+        binding?.spinnerSherpaPunct?.visibility = vis
     }
 
     private fun legacyWizardEngine(sp: SharedPreferences): String? = when {
@@ -85,6 +140,7 @@ class DownloadActivity : AppCompatActivity() {
             when (engine) {
                 AsrEnginePreferences.PARAKEET -> R.string.download_model_text_parakeet
                 AsrEnginePreferences.MOONSHINE -> R.string.download_model_text_moonshine
+                AsrEnginePreferences.SHERPA -> R.string.download_model_text_sherpa
                 else -> R.string.download_model_text
             },
         )
@@ -107,6 +163,16 @@ class DownloadActivity : AppCompatActivity() {
                 val dir = getExternalFilesDir(null)
                 if (dir != null && ParakeetModelFiles.allOnnxPresent(dir)) {
                     AsrEnginePreferences.setMainEngine(this, AsrEnginePreferences.PARAKEET)
+                    showReadyAndGoMain()
+                }
+            }
+            AsrEnginePreferences.SHERPA -> {
+                val dir = getExternalFilesDir(null)
+                if (dir != null && SherpaModelFiles.allFilesPresentForSelectedVariant(dir, this)) {
+                    PreferenceManager.getDefaultSharedPreferences(this).edit()
+                        .putBoolean(SherpaPreferences.KEY_USE_SHERPA_MAIN, true)
+                        .apply()
+                    AsrEnginePreferences.setMainEngine(this, AsrEnginePreferences.SHERPA)
                     showReadyAndGoMain()
                 }
             }
@@ -157,6 +223,37 @@ class DownloadActivity : AppCompatActivity() {
                         }
                         binding?.downloadProgress?.progress = 100
                         binding?.buttonStart?.visibility = View.VISIBLE
+                    },
+                )
+            }
+            AsrEnginePreferences.SHERPA -> {
+                binding?.buttonUpdate?.visibility = View.GONE
+                SherpaDownloader.downloadSherpaModels(
+                    this,
+                    binding?.downloadProgress,
+                    binding?.downloadSize,
+                    Runnable {
+                        val dir = getExternalFilesDir(null)
+                        if (dir != null && SherpaModelFiles.allFilesPresentForSelectedVariant(dir, this)) {
+                            PreferenceManager.getDefaultSharedPreferences(this).edit()
+                                .putBoolean(SherpaPreferences.KEY_USE_SHERPA_MAIN, true)
+                                .apply()
+                            AsrEnginePreferences.setMainEngine(this, AsrEnginePreferences.SHERPA)
+                        }
+                        val punctEntry = SherpaPunctCatalogEntry.requireById(
+                            SherpaPreferences.selectedPunctModelId(this),
+                        )
+                        binding?.downloadProgress?.progress = 0
+                        SherpaPunctuationDownloader.downloadPunctModelIfNeeded(
+                            this,
+                            punctEntry,
+                            binding?.downloadProgress,
+                            binding?.downloadSize,
+                            Runnable {
+                                binding?.downloadProgress?.progress = 100
+                                binding?.buttonStart?.visibility = View.VISIBLE
+                            },
+                        )
                     },
                 )
             }
