@@ -27,7 +27,7 @@ object SherpaPunctuationPostProcessor {
             }
         }
 
-        t = normalizeAllCapsWords(t)
+        t = normalizeShoutedCasing(t)
         return t
     }
 
@@ -39,14 +39,31 @@ object SherpaPunctuationPostProcessor {
         return n >= 1 && (n * 4 >= s.length / 8 || s.contains(','))
     }
 
-    /** If the line is mostly ALL CAPS words, convert to sentence case for readability. */
-    private fun normalizeAllCapsWords(s: String): String {
+    /**
+     * Many Sherpa English checkpoints emit **ALL CAPS** with sparse punctuation. If there is almost no
+     * lowercase, fold to sentence-style casing (not title-case per word).
+     */
+    private fun normalizeShoutedCasing(s: String): String {
         val letters = s.count { it.isLetter() }
-        if (letters < 8) return s
-        val upperLetters = s.count { it.isLetter() && it.isUpperCase() }
-        if (upperLetters * 10 < letters * 7) return s
+        if (letters < 3) return s
+        val lowerLetters = s.count { it.isLetter() && it.isLowerCase() }
+        // Skip if already mostly lowercase / mixed (e.g. model fixed casing).
+        if (lowerLetters * 10 > letters * 3) return s
 
-        val lower = s.lowercase(Locale.getDefault())
-        return lower.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
+        val folded = s.lowercase(Locale.ROOT)
+        val sb = StringBuilder()
+        var capNext = true
+        for (ch in folded) {
+            if (capNext && ch.isLetter()) {
+                sb.append(ch.titlecase(Locale.getDefault()))
+                capNext = false
+            } else {
+                sb.append(ch)
+                if (ch == '.' || ch == '!' || ch == '?') {
+                    capNext = true
+                }
+            }
+        }
+        return sb.toString()
     }
 }

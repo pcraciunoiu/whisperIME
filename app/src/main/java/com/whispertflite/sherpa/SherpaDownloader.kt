@@ -45,6 +45,8 @@ object SherpaDownloader {
             activity.runOnUiThread { onDone.run() }
             return
         }
+        // Paths in getModelConfig are "modelDir/file.onnx" for local layout. HF repos store those files at repo root.
+        val modelDir = paths.first().substringBefore('/', missingDelimiterValue = "")
         val totalEst = entry.approxSizeMb.coerceAtLeast(1) * 1_000_000L
         Thread {
             try {
@@ -58,13 +60,19 @@ object SherpaDownloader {
                     if (dest.isFile) {
                         dest.delete()
                     }
-                    val url = huggingFaceResolveMainUrl(base, relPath)
+                    val urlPathForHub = huggingFaceBlobPathInRepo(modelDir, relPath)
+                    val url = huggingFaceResolveMainUrl(base, urlPathForHub)
                     Log.i(TAG, "GET $url")
                     try {
                         HttpFileDownloader.downloadFileToFile(url, dest, { n ->
                             done += n
                             activity.runOnUiThread {
-                                sizeView?.text = "${done / 1024 / 1024} MB"
+                                val mb = done / (1024.0 * 1024.0)
+                                sizeView?.text = if (mb < 0.01 && done > 0) {
+                                    "${done / 1024} KB"
+                                } else {
+                                    String.format(java.util.Locale.US, "%.2f MB", mb)
+                                }
                                 progressBar?.progress = ((done * 100L) / totalEst).toInt().coerceIn(0, 99)
                             }
                         })
@@ -87,10 +95,24 @@ object SherpaDownloader {
 
     /** `https://huggingface.co/org/repo/resolve/main/relative/path` with per-segment encoding. */
     @JvmStatic
-    fun huggingFaceResolveMainUrl(repoBase: String, relativePath: String): String {
-        val enc = relativePath.split('/').joinToString("/") { seg ->
+    fun huggingFaceResolveMainUrl(repoBase: String, pathUnderBranch: String): String {
+        val enc = pathUnderBranch.split('/').joinToString("/") { seg ->
             URLEncoder.encode(seg, "UTF-8").replace("+", "%20")
         }
         return "${repoBase.trim().trimEnd('/')}/resolve/main/$enc"
+    }
+
+    /**
+     * HF model repos list ONNX/token files at the **root**; [getModelConfig] uses `modelDir/filename` for on-disk layout.
+     * For `/resolve/main/…` URLs, drop the leading `modelDir/` segment so paths match the hub.
+     */
+    @JvmStatic
+    fun huggingFaceBlobPathInRepo(modelDir: String, relativePathFromConfig: String): String {
+        val prefix = "$modelDir/"
+        return if (modelDir.isNotEmpty() && relativePathFromConfig.startsWith(prefix)) {
+            relativePathFromConfig.removePrefix(prefix)
+        } else {
+            relativePathFromConfig
+        }
     }
 }
