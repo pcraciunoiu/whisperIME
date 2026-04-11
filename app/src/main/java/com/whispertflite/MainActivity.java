@@ -87,6 +87,7 @@ public class MainActivity extends AppCompatActivity {
 
     private TextView tvStatus;
     private EditText tvResult;
+    private FloatingActionButton fabUndo;
     private FloatingActionButton fabCopy;
     private ImageButton btnRecord;
     private LinearLayout layoutModeChinese;
@@ -507,6 +508,8 @@ public class MainActivity extends AppCompatActivity {
                 else finish();
             }
         });
+        fabUndo = findViewById(R.id.fabUndo);
+        fabUndo.setOnClickListener(v -> ImeTextEditHelper.applyUndoToEditText(tvResult));
         fabCopy = findViewById(R.id.fabCopy);
         fabCopy.setOnClickListener(v -> {
             // Get the text from tvResult

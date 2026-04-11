@@ -69,6 +69,31 @@ public final class ImeTextEditHelper {
         return true;
     }
 
+    /**
+     * Deletes one Unicode code point before the cursor (one visible character for BMP; full
+     * surrogate pair for emoji). Uses {@link InputConnection#deleteSurroundingText(int, int)}.
+     */
+    public static boolean deleteOneCodePointBeforeCursor(InputConnection ic) {
+        if (ic == null) {
+            return false;
+        }
+        CharSequence bef = ic.getTextBeforeCursor(2, 0);
+        if (bef == null || bef.length() == 0) {
+            return false;
+        }
+        int n = 1;
+        int len = bef.length();
+        if (len >= 2) {
+            char c1 = bef.charAt(len - 2);
+            char c2 = bef.charAt(len - 1);
+            if (Character.isSurrogatePair(c1, c2)) {
+                n = 2;
+            }
+        }
+        ic.deleteSurroundingText(n, 0);
+        return true;
+    }
+
     /** Lowercase trim plus strip trailing . ! ? */
     public static String normalizeVoiceCommandPhrase(String t) {
         if (t == null) return "";

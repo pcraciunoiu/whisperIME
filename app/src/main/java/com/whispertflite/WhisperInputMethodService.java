@@ -57,7 +57,9 @@ public class WhisperInputMethodService extends InputMethodService {
     private ImageButton btnTranslate;
     private ImageButton btnModeAuto;
     private ImageButton btnEnter;
-    private ImageButton btnDel;
+    private ImageButton btnUndo;
+    private ImageButton btnBackspace;
+    private ImageButton btnDeleteWord;
     private TextView tvStatus;
     private Recorder mRecorder = null;
     private Whisper mWhisper = null;
@@ -190,7 +192,9 @@ public class WhisperInputMethodService extends InputMethodService {
         btnTranslate = view.findViewById(R.id.btnTranslate);
         btnModeAuto = view.findViewById(R.id.btnModeAuto);
         btnEnter = view.findViewById(R.id.btnEnter);
-        btnDel = view.findViewById(R.id.btnDel);
+        btnUndo = view.findViewById(R.id.btnUndo);
+        btnBackspace = view.findViewById(R.id.btnBackspace);
+        btnDeleteWord = view.findViewById(R.id.btnDeleteWord);
         processingBar = view.findViewById(R.id.processing_bar);
         tvStatus = view.findViewById(R.id.tv_status);
         sdcardDataFolder = this.getExternalFilesDir(null);
@@ -266,7 +270,49 @@ public class WhisperInputMethodService extends InputMethodService {
             });
         }
 
-        btnDel.setOnTouchListener(new View.OnTouchListener() {
+        btnUndo.setOnClickListener(v -> {
+            InputConnection ic = getCurrentInputConnection();
+            ImeTextEditHelper.applyScratchThat(ic);
+        });
+
+        btnBackspace.setOnTouchListener(new View.OnTouchListener() {
+            private Runnable initialBsRunnable;
+            private Runnable repeatBsRunnable;
+
+            @Override
+            public boolean onTouch(View v, MotionEvent event) {
+                if (event.getAction() == MotionEvent.ACTION_DOWN) {
+                    InputConnection ic0 = getCurrentInputConnection();
+                    ImeTextEditHelper.deleteOneCodePointBeforeCursor(ic0);
+                    initialBsRunnable = () -> {
+                        InputConnection ic1 = getCurrentInputConnection();
+                        ImeTextEditHelper.deleteOneCodePointBeforeCursor(ic1);
+                        repeatBsRunnable = new Runnable() {
+                            @Override
+                            public void run() {
+                                InputConnection ic2 = getCurrentInputConnection();
+                                ImeTextEditHelper.deleteOneCodePointBeforeCursor(ic2);
+                                handler.postDelayed(this, 100);
+                            }
+                        };
+                        handler.postDelayed(repeatBsRunnable, 100);
+                    };
+                    handler.postDelayed(initialBsRunnable, 500);
+                } else if (event.getAction() == MotionEvent.ACTION_UP) {
+                    if (initialBsRunnable != null) {
+                        handler.removeCallbacks(initialBsRunnable);
+                    }
+                    if (repeatBsRunnable != null) {
+                        handler.removeCallbacks(repeatBsRunnable);
+                    }
+                    initialBsRunnable = null;
+                    repeatBsRunnable = null;
+                }
+                return true;
+            }
+        });
+
+        btnDeleteWord.setOnTouchListener(new View.OnTouchListener() {
             private Runnable initialDeleteRunnable;
             private Runnable repeatDeleteRunnable;
 
@@ -275,13 +321,11 @@ public class WhisperInputMethodService extends InputMethodService {
                 if (event.getAction() == MotionEvent.ACTION_DOWN) {
                     InputConnection icDel = getCurrentInputConnection();
                     ImeTextEditHelper.deleteLastWord(icDel);
-                    // Post the initial delay of 500ms
                     initialDeleteRunnable = new Runnable() {
                         @Override
                         public void run() {
                             InputConnection ic0 = getCurrentInputConnection();
                             ImeTextEditHelper.deleteLastWord(ic0);
-                            // Start repeating every 100ms
                             repeatDeleteRunnable = new Runnable() {
                                 @Override
                                 public void run() {
@@ -295,7 +339,6 @@ public class WhisperInputMethodService extends InputMethodService {
                     };
                     handler.postDelayed(initialDeleteRunnable, 500);
                 } else if (event.getAction() == MotionEvent.ACTION_UP) {
-                    // Remove both callbacks
                     if (initialDeleteRunnable != null) {
                         handler.removeCallbacks(initialDeleteRunnable);
                     }
@@ -665,11 +708,19 @@ public class WhisperInputMethodService extends InputMethodService {
         }
         if (t.length() > 0) {
             VoiceInputUndoStack.pushFromInputConnection(ic);
+            if (hadLivePartials) {
+                ic.beginBatchEdit();
+                try {
+                    ic.setComposingText("", 1);
+                } finally {
+                    ic.endBatchEdit();
+                }
+            }
             ic.commitText(t + " ", 1);
             Log.i(TAG, "commitHoldTranscription: committed chars=" + t.length() + " hadLivePartials=" + hadLivePartials);
         } else if (hadLivePartials) {
-            ic.finishComposingText();
-            Log.i(TAG, "commitHoldTranscription: finishComposingText (final empty; composing may hold text)");
+            ic.setComposingText("", 1);
+            Log.i(TAG, "commitHoldTranscription: cleared composing (empty final)");
         } else {
             Log.d(TAG, "commitHoldTranscription: empty transcript, no live composing (check mic/engine)");
         }

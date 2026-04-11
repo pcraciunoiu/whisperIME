@@ -36,6 +36,9 @@
     <string name="record_button">Record</string>
     <string name="return_button">Return</string>
     <string name="delete_button">Delete</string>
+    <string name="undo_last_voice_edit_button">Undo last voice edit</string>
+    <string name="delete_one_character">Delete one character (backspace)</string>
+    <string name="delete_last_word">Delete last word</string>
     <string name="model_output">Model output</string>
     <string name="processing_done">Processing done in\u2009</string>
     <string name="language">Language:</string>
