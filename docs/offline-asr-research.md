@@ -15,7 +15,7 @@
 | **Whisper** | TFLite ([DocWolle / whisper_tflite_models](https://huggingface.co/DocWolle/whisper_tflite_models)) | Yes (`.en` models) + multilingual | Main path: [`WhisperEngineJava`](../app/src/main/java/com/whispertflite/engine/WhisperEngineJava.java); optional **live** partials via [`WhisperLivePreviewLoop`](../app/src/main/java/com/whispertflite/asr/WhisperLivePreviewLoop.java). Model basename prefs: [`WhisperModelSelection`](../app/src/main/java/com/whispertflite/asr/WhisperModelSelection.kt) (main vs RecognitionService). |
 | **Parakeet** | ONNX + Microsoft ORT | English (streaming) | [`ParakeetStreamingEngine`](../app/src/main/java/com/whispertflite/parakeet/ParakeetStreamingEngine.kt); downloads from [smcleod HF](https://huggingface.co/smcleod/multitalker-parakeet-streaming-0.6b-v1-onnx-int8) per [`ParakeetConstants`](../app/src/main/java/com/whispertflite/parakeet/ParakeetConstants.kt). |
 | **Moonshine Base** | `moonshine-voice` AAR + ORT | English | [`MoonshineHoldRecorder`](../app/src/main/java/com/whispertflite/moonshine/MoonshineHoldRecorder.kt); shares native `libonnxruntime.so` with Parakeet—see [`app/build.gradle`](../app/build.gradle). |
-| **Sherpa-ONNX** | k2-fsa sherpa-onnx AAR + ORT (overlaid `libonnxruntime.so`) | English (streaming catalog) | [`SherpaStreamingRecorder`](../app/src/main/java/com/whispertflite/sherpa/SherpaStreamingRecorder.kt); models under `<files>/sherpa-onnx-models/<HF dir>/` per [`SherpaModelCatalog`](../app/src/main/java/com/whispertflite/sherpa/SherpaModelCatalog.kt) / `getModelConfig` types. Optional offline final punctuation polish: [`SherpaPunctuationPostProcessor`](../app/src/main/java/com/whispertflite/sherpa/SherpaPunctuationPostProcessor.kt). |
+| **Sherpa-ONNX** | k2-fsa sherpa-onnx AAR + ORT (overlaid `libonnxruntime.so`) | Streaming catalog (English Zipformer + NeMo CTC + Nemotron; `getModelConfig` indices) | [`SherpaStreamingRecorder`](../app/src/main/java/com/whispertflite/sherpa/SherpaStreamingRecorder.kt); models under `<files>/sherpa-onnx-models/<HF dir>/` per [`SherpaModelCatalog`](../app/src/main/java/com/whispertflite/sherpa/SherpaModelCatalog.kt) / `getModelConfig` types. Optional offline final punctuation polish: [`SherpaPunctuationPostProcessor`](../app/src/main/java/com/whispertflite/sherpa/SherpaPunctuationPostProcessor.kt). |
 
 ---
 
@@ -63,9 +63,9 @@ See [parakeet-onnxruntime.md](parakeet-onnxruntime.md) — duplicate `libonnxrun
 
 ## Decisions (for `offline-agents-feature-list` todo)
 
-- [x] README/engine picker includes **Whisper + Parakeet + Moonshine + Sherpa-ONNX** (English streaming catalog).
+- [x] README/engine picker includes **Whisper + Parakeet + Moonshine + Sherpa-ONNX** (streaming catalog).
 - [x] Reference benchmark app (android-offline-transcribe) documented above under **Reference project**.
-- [x] Sherpa-onnx: fourth engine with RecognitionService-first routing; debug **Sherpa spike** activity retained for quick JNI checks.
+- [x] Sherpa-onnx: fourth engine with RecognitionService-first routing; JNI validated via the main catalog download path.
 
 **Integration priority:** see [asr-session-architecture.md](asr-session-architecture.md) (RecognitionService-first; IME secondary).
 
@@ -73,75 +73,26 @@ See [parakeet-onnxruntime.md](parakeet-onnxruntime.md) — duplicate `libonnxrun
 
 ## Sherpa-ONNX (fourth engine)
 
-**Purpose:** English **streaming** ASR via k2-fsa **sherpa-onnx** with the same offline constraint as other engines. User selects **Sherpa-ONNX** in [`AsrEnginePreferences`](../app/src/main/java/com/whispertflite/AsrEnginePreferences.kt) and a **catalog variant** ([`SherpaModelCatalog`](../app/src/main/java/com/whispertflite/sherpa/SherpaModelCatalog.kt)); models must match `getModelConfig(type)` relative paths under `…/files/sherpa-onnx-models/`.
+**Purpose:** **Streaming** ASR via k2-fsa **sherpa-onnx** with the same offline constraint as other engines. User selects **Sherpa-ONNX** in [`AsrEnginePreferences`](../app/src/main/java/com/whispertflite/AsrEnginePreferences.kt) and a **catalog variant** ([`SherpaModelCatalog`](../app/src/main/java/com/whispertflite/sherpa/SherpaModelCatalog.kt)); models must match `getModelConfig(type)` relative paths under `…/files/sherpa-onnx-models/`.
 
 **Punctuation strategy:** Streaming Zipformer/LSTM checkpoints often emit **little or no** punctuation. The app applies **offline, on-device** final-text polish ([`SherpaPunctuationPostProcessor`](../app/src/main/java/com/whispertflite/sherpa/SherpaPunctuationPostProcessor.kt))—no cloud—controlled by `SherpaPreferences.KEY_PUNCT_ENHANCE` (default on). Partials stay raw for latency.
 
-**Downloads:** The setup screen **downloads** ONNX/token files over HTTPS. Hub URLs use files at the **repo root** (e.g. `…/resolve/main/encoder-….onnx`); on disk the app still mirrors sherpa’s `modelDir/file` layout under `sherpa-onnx-models/`. Manual `adb` copy still works (same layout as the spike instructions below).
+**Downloads:** The setup screen **downloads** ONNX/token files over HTTPS. Hub URLs use files at the **repo root** (e.g. `…/resolve/main/encoder-….onnx`); on disk the app still mirrors sherpa’s `modelDir/file` layout under `sherpa-onnx-models/`. Manual `adb` copy uses the same layout (see below).
 
----
+**AAR / JNI:** Gradle downloads `sherpa-onnx-*.aar` from [k2-fsa releases](https://github.com/k2-fsa/sherpa-onnx/releases) (`downloadSherpaOnnxAar` in [`app/build.gradle`](../app/build.gradle)). Kotlin/API code comes from `classes.jar` extracted from that AAR; native code is merged separately. Sherpa’s JNI is linked against a different ONNX Runtime than Moonshine’s `OrtGetApiBase@VERS_1.23.0` line, so the app ships **Microsoft’s** `libonnxruntime.so` (for Moonshine + Parakeet + `libonnxruntime4j_jni.so`) **and** Sherpa’s runtime as **`libonnxruntime_sherpa.so`**, with **`prepareSherpaJniWithRenamedOrt`** patching `libsherpa-onnx-jni.so` to load the renamed library (host `patchelf` from the build).
 
-## Sherpa-onnx spike (dev-only activity)
-
-**Purpose:** Quick JNI / mic loop check beside production Sherpa wiring; **does not** replace the catalog-driven engine.
-
-**AAR / JNI:** Gradle downloads `sherpa-onnx-1.12.36.aar` from [release v1.12.37](https://github.com/k2-fsa/sherpa-onnx/releases/tag/v1.12.37) (`downloadSherpaOnnxAar` in [`app/build.gradle`](../app/build.gradle)). `libsherpa-onnx-jni.so` must load against an `libonnxruntime.so` that exports what that JNI was linked with (`OrtGetApiBase`, …). The Microsoft ORT unpack alone caused `UnsatisfiedLinkError`; the build runs **`overlaySherpaOnnxRuntime`** to copy **only** `libonnxruntime.so` from the sherpa AAR over the MS unpack (keeping `libonnxruntime4j_jni.so` from Microsoft for Parakeet). If Moonshine/Parakeet regress, revisit ORT packaging. Logcat tag **`SherpaOnnxSpike`** prints native `.so` names/sizes on spike init for debugging.
-
-**Spike model (English streaming Zipformer, `getModelConfig(6)`):**
+### Manual copy (example: Zipformer EN Jun 2023, `getModelConfig(6)`)
 
 | | |
 |--|--|
 | **Hugging Face** | [csukuangfj/sherpa-onnx-streaming-zipformer-en-2023-06-26](https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-en-2023-06-26) |
 | **On-device path** | `<getExternalFilesDir>/sherpa-onnx-models/sherpa-onnx-streaming-zipformer-en-2023-06-26/` |
-| **Required files** | `encoder-epoch-99-avg-1-chunk-16-left-128.int8.onnx`, `decoder-epoch-99-avg-1-chunk-16-left-128.onnx`, `joiner-epoch-99-avg-1-chunk-16-left-128.onnx`, `tokens.txt` (same layout as HF repo root; use Git LFS or `huggingface-cli download`). |
-| **Approx. size** | ~350 MB total (large encoders on LFS). |
+| **Required files** | Filenames from `getModelConfig` for that catalog type (e.g. `encoder-…`, `decoder-…`, `joiner-…`, `tokens.txt`); same names as the HF repo root. |
 
-**Step-by-step: what to copy and where (debug APK)**
+For a debug APK (`applicationId` `org.speechtotext.input.debug`), push into:
 
-1. **Install the debug build** of the app once (`applicationId` is `org.speechtotext.input.debug`). Android creates the app-specific storage root the first time the app runs.
-2. **Target directory on the phone** (must match exactly — names are case-sensitive):
+`/storage/emulated/0/Android/data/org.speechtotext.input.debug/files/sherpa-onnx-models/<modelDir>/`
 
-   `/storage/emulated/0/Android/data/org.speechtotext.input.debug/files/sherpa-onnx-models/sherpa-onnx-streaming-zipformer-en-2023-06-26/`
-
-   That path is: **scoped storage** → **Android/data** → **your debug package** → **files** → **sherpa-onnx-models** → **model folder**. The spike screen shows this path when models are missing or ready.
-3. **Create the two nested folders** if they do not exist: `sherpa-onnx-models` and inside it `sherpa-onnx-streaming-zipformer-en-2023-06-26`.
-4. **Copy exactly these four files** into that inner folder (repo root on [Hugging Face](https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-en-2023-06-26); large files use Git LFS):
-
-   - `encoder-epoch-99-avg-1-chunk-16-left-128.int8.onnx`
-   - `decoder-epoch-99-avg-1-chunk-16-left-128.onnx`
-   - `joiner-epoch-99-avg-1-chunk-16-left-128.onnx`
-   - `tokens.txt`
-
-   Do **not** rename them. You do **not** need `test_wavs/`, `README.md`, or `bpe.model` for this spike.
-5. **How to get the files onto the phone**
-
-   - **From a computer (recommended):** On your PC, download the repo with LFS (`git lfs install` then clone, or use `huggingface-cli download csukuangfj/sherpa-onnx-streaming-zipformer-en-2023-06-26 --local-dir ./zipformer-en`). Copy only the four files above into a local folder that mirrors the inner path name. Then push with USB or Wi‑Fi debugging:
-
-     `adb shell mkdir -p "/storage/emulated/0/Android/data/org.speechtotext.input.debug/files/sherpa-onnx-models/sherpa-onnx-streaming-zipformer-en-2023-06-26"`
-
-     `adb push encoder-epoch-99-avg-1-chunk-16-left-128.int8.onnx "/storage/emulated/0/Android/data/org.speechtotext.input.debug/files/sherpa-onnx-models/sherpa-onnx-streaming-zipformer-en-2023-06-26/"`
-
-     (repeat `adb push` for the other three files), or push a whole directory: `adb push ./sherpa-onnx-streaming-zipformer-en-2023-06-26/. "/storage/emulated/0/Android/data/org.speechtotext.input.debug/files/sherpa-onnx-models/sherpa-onnx-streaming-zipformer-en-2023-06-26/"`
-
-   - **Without adb:** Use Files by Google or a PC USB connection to place the same four files under that path (you may need to show hidden folders or use “Android/data” access; on Android 11+ direct access to `Android/data` from some file managers is restricted—**adb or the device’s “Files” app for that package** is often easier).
-6. **Restart the app** (force-stop or swipe away), open **Sherpa spike (debug)** on the main screen, and confirm the status line says the model dir is OK. Then use **Start recording**.
-
-**Release build note:** If you install a non-debug APK, replace `org.speechtotext.input.debug` with `org.speechtotext.input` in the paths above.
-
-**Code:** [`SherpaOnnxSpikeActivity`](../app/src/main/java/com/whispertflite/sherpa/SherpaOnnxSpikeActivity.kt), [`SherpaOnnxSpikePaths`](../app/src/main/java/com/whispertflite/sherpa/SherpaOnnxSpikePaths.kt). Debug builds expose a **Sherpa spike** entry on the main screen; release builds hide it.
-
-**Measurements (on-device, to fill in after runs):**
-
-| Check | Result |
-|-------|--------|
-| Load / JNI | e.g. no `UnsatisfiedLinkError`; tag `SherpaOnnxSpike` in logcat |
-| Stability | e.g. cold start + 5 record sessions without crash |
-| Latency | e.g. rough RTF from log timestamps |
-| WER | optional: same clips as [wer-benchmark.md](wer-benchmark.md) |
-
-**Go / no-go (spike vs production):**
-
-- **Go:** JNI stable with merged MS ORT (`overlaySherpaOnnxRuntime`); fourth engine uses the same packaging with catalog-driven models.
-- **If ORT regresses Parakeet/Moonshine:** revisit overlay strategy; spike activity remains useful for isolating JNI issues.
+Use `huggingface-cli download` or Git LFS, then `adb push` the files. For release builds, replace `org.speechtotext.input.debug` with `org.speechtotext.input`. After copying, pick the matching variant in the app download screen or main-screen Sherpa settings.
 
 **Last updated:** 2026-04-10

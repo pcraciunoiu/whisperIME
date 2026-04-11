@@ -32,8 +32,4 @@ This matches the refactor audit: *extract shared ASR/session logic with RS as th
 
 **Production path:** [`AsrEnginePreferences.SHERPA`](../app/src/main/java/com/whispertflite/AsrEnginePreferences.kt) + [`SherpaModelCatalog`](../app/src/main/java/com/whispertflite/sherpa/SherpaModelCatalog.kt) (built-in `getModelConfig` types). [`WhisperRecognitionService`](../app/src/main/java/com/whispertflite/WhisperRecognitionService.java) routes **Moonshine → Parakeet → Sherpa → Whisper (TFLite)** when each “selected and ready” gate matches. Streaming hold uses [`SherpaStreamingRecorder`](../app/src/main/java/com/whispertflite/sherpa/SherpaStreamingRecorder.kt). **Punctuation:** optional offline final-text polish via [`SherpaPunctuationPostProcessor`](../app/src/main/java/com/whispertflite/sherpa/SherpaPunctuationPostProcessor.kt) (toggle `SherpaPreferences.KEY_PUNCT_ENHANCE`).
 
-**ORT:** Sherpa JNI expects a matching `libonnxruntime.so`; the build uses **`overlaySherpaOnnxRuntime`** in [`app/build.gradle`](../app/build.gradle) (see [offline-asr-research.md](offline-asr-research.md)).
-
-### Sherpa-onnx spike (dev-only)
-
-Debug builds can still open [`SherpaOnnxSpikeActivity`](../app/src/main/java/com/whispertflite/sherpa/SherpaOnnxSpikeActivity.kt) for a minimal Zipformer trial; production Sherpa uses the shared catalog + [`SherpaOnnxConfig.absolutizeModelConfig`](../app/src/main/java/com/whispertflite/sherpa/SherpaOnnxConfig.kt).
+**ORT:** Microsoft ONNX Runtime is unpacked for Moonshine/Parakeet; Sherpa uses a second copy as `libonnxruntime_sherpa.so` with a patched `DT_NEEDED` on `libsherpa-onnx-jni.so` — see [`app/build.gradle`](../app/build.gradle) and [offline-asr-research.md](offline-asr-research.md).
