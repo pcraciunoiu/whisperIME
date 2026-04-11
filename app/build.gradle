@@ -4,8 +4,9 @@ plugins {
 }
 
 // Resolved AAR used only to unpack Microsoft's libonnxruntime.so into jniLibs so it wins over
-// moonshine-voice's bundled (older) libonnxruntime.so. Without this, JNI matches MS ORT 1.19.x
-// but the merged native runtime is Moonshine's — Parakeet ONNX sessions fail or misbehave.
+// moonshine-voice's duplicate path. Versions MUST stay aligned with moonshine-voice: its
+// libmoonshine.so links against the ORT in that AAR (~1.23.x). Forcing an older MS ORT (e.g. 1.19)
+// breaks Moonshine while fixing Parakeet JNI — use the same onnxruntime-android version everywhere.
 configurations {
     ortJniUnpack {
         canBeConsumed = false
@@ -94,7 +95,7 @@ android {
     }
 
     // Parakeet (MS ORT) and moonshine-voice both ship libonnxruntime.so — keep one copy.
-    // unpackMicrosoftOrtJni + sourceSets jniLibs below force Microsoft's runtime (see top of file).
+    // unpackMicrosoftOrtJni + sourceSets jniLibs below force a single MS runtime (see top of file).
     packaging {
         jniLibs {
             pickFirsts += ['lib/arm64-v8a/libonnxruntime.so']
@@ -110,7 +111,8 @@ android {
 }
 
 dependencies {
-    ortJniUnpack 'com.microsoft.onnxruntime:onnxruntime-android:1.19.2'
+    // Must match libmoonshine.so: it links OrtGetApiBase@VERS_1.23.0 (not 1.23.1 — GNU symbol version).
+    ortJniUnpack 'com.microsoft.onnxruntime:onnxruntime-android:1.23.0'
 
     implementation 'androidx.appcompat:appcompat:1.7.0'
     implementation 'com.google.android.material:material:1.12.0'
@@ -121,8 +123,8 @@ dependencies {
 
     implementation 'org.apache.commons:commons-compress:1.27.1'
     // Microsoft ORT must appear before moonshine-voice so merged libonnxruntime.so matches
-    // libonnxruntime4j_jni.so (Parakeet). Moonshine's bundled ORT is older and lacks OrtGetApiBase.
-    implementation 'com.microsoft.onnxruntime:onnxruntime-android:1.19.2'
+    // libonnxruntime4j_jni.so (Parakeet). Pin 1.23.0 so OrtGetApiBase@VERS_1.23.0 matches moonshine-voice.
+    implementation 'com.microsoft.onnxruntime:onnxruntime-android:1.23.0'
     implementation 'ai.moonshine:moonshine-voice:0.0.51'
 
     // Main TensorFlow Lite library

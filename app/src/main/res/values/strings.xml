@@ -17,7 +17,7 @@
     <string name="engine_moonshine">Moonshine Base (English)</string>
     <string name="download_model_text_parakeet">\nDownload Parakeet ONNX models from Hugging Face (~650 MB). English streaming.</string>
     <string name="live_transcribe">Transcribe live</string>
-    <string name="live_transcribe_hint">Streaming text while holding (Parakeet or Moonshine). Whisper decodes when you release.</string>
+    <string name="live_transcribe_hint">Parakeet/Moonshine: streaming text while holding. Whisper decodes on release; offline live partials for Whisper are not implemented yet.</string>
     <string name="models_missing_open_download">Models missing. Opening download screen.</string>
     <string name="select_model">Model:</string>
     <string name="main_model_moonshine">Moonshine Base (English)</string>
@@ -62,7 +62,8 @@
     <string name="moonshine_use_ime">Use Moonshine in keyboard (IME)</string>
     <string name="moonshine_use_voice_input">Use Moonshine for system voice input</string>
     <string name="moonshine_start_failed">Could not start Moonshine (permission, device, or models).</string>
-    <string name="moonshine_arm64_only">Moonshine needs a 64-bit ARM phone or an ARM64 (arm64-v8a) emulator image. x86/x86_64 AVDs have no Moonshine native library.</string>
+    <string name="moonshine_requires_arm64_device">Moonshine only runs on arm64-v8a. On an emulator, use an ARM64 system image (not x86_64).</string>
+    <string name="moonshine_native_libraries_failed">Moonshine could not load native libraries on this device. On a real arm64 phone this is often an ONNX Runtime mismatch; see logcat tag MoonshineModelFiles for UnsatisfiedLinkError.</string>
     <string name="moonshine_info_long_press">Long-press ℹ️ for Moonshine settings</string>
     <string name="whisper_model_missing">Whisper TFLite model is not installed. Open the download screen and fetch Whisper models.</string>
     <string name="parakeet_models_missing">Parakeet ONNX models are not installed. Download them from the setup screen.</string>

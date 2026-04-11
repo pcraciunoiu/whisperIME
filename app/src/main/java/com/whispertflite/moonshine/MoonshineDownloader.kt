@@ -11,6 +11,7 @@ import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream
 import java.io.BufferedInputStream
 import java.io.File
 import java.io.FileOutputStream
+import java.net.HttpURLConnection
 import java.net.URL
 
 object MoonshineDownloader {
@@ -29,7 +30,12 @@ object MoonshineDownloader {
         Thread {
             try {
                 outDir.mkdirs()
-                val conn = URL(MoonshineConstants.ANDROID_EXAMPLES_TAR_URL).openConnection()
+                val conn = URL(MoonshineConstants.ANDROID_EXAMPLES_TAR_URL).openConnection() as HttpURLConnection
+                conn.instanceFollowRedirects = true
+                conn.setRequestProperty(
+                    "User-Agent",
+                    "whisperIME MoonshineDownloader (Android; like okhttp)",
+                )
                 conn.connectTimeout = 20_000
                 conn.readTimeout = 120_000
                 val total = conn.contentLengthLong.coerceAtLeast(1L)
@@ -68,11 +74,19 @@ object MoonshineDownloader {
                     }
                 }
                 activity.runOnUiThread {
-                    val ok = MoonshineModelFiles.allModelFilesPresent(activity)
-                    progressBar?.progress = if (ok) 100 else 0
-                    if (ok) {
+                    val filesOk = MoonshineModelFiles.hasMoonshineBaseModelFilesOnDisk(activity)
+                    progressBar?.progress = if (filesOk) 100 else 0
+                    if (filesOk) {
+                        if (!MoonshineModelFiles.isDeviceSupported(activity)) {
+                            Log.w(
+                                TAG,
+                                "Moonshine models on disk but native libs did not load — " +
+                                    "ASR will fail until device/ORT is fixed; not a download failure",
+                            )
+                        }
                         onDone.run()
                     } else {
+                        Log.e(TAG, "Tar finished but encoder/decoder/tokenizer missing or too small under ${MoonshineModelFiles.baseEnDir(activity)}")
                         Toast.makeText(activity, R.string.error_download, Toast.LENGTH_LONG).show()
                     }
                 }

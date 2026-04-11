@@ -54,7 +54,7 @@ Community or marketing pages (e.g. “best offline apps”) are **not** substitu
 
 ## Parakeet + Moonshine ORT conflict (fixed)
 
-See [parakeet-onnxruntime.md](parakeet-onnxruntime.md) — duplicate `libonnxruntime.so` from Moonshine’s AAR overwrote Microsoft’s runtime while JNI stayed on 1.19.x, which broke Parakeet.
+See [parakeet-onnxruntime.md](parakeet-onnxruntime.md) — duplicate `libonnxruntime.so` paths must resolve to **one** Microsoft ORT version that matches both Parakeet’s Java JNI and Moonshine’s `libmoonshine.so` (bump `onnxruntime-android` and `ortJniUnpack` together).
 
 ## Decisions (for `offline-agents-feature-list` todo)
 

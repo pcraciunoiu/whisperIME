@@ -98,7 +98,7 @@ class DownloadActivity : AppCompatActivity() {
 
         when (wizard) {
             AsrEnginePreferences.MOONSHINE -> {
-                if (MoonshineModelFiles.allModelFilesPresent(this)) {
+                if (MoonshineModelFiles.hasMoonshineBaseModelFilesOnDisk(this)) {
                     AsrEnginePreferences.setMainEngine(this, AsrEnginePreferences.MOONSHINE)
                     showReadyAndGoMain()
                 }
@@ -151,7 +151,7 @@ class DownloadActivity : AppCompatActivity() {
                     binding?.downloadSize,
                     Runnable {
                         val sp = PreferenceManager.getDefaultSharedPreferences(this)
-                        if (MoonshineModelFiles.allModelFilesPresent(this)) {
+                        if (MoonshineModelFiles.hasMoonshineBaseModelFilesOnDisk(this)) {
                             AsrEnginePreferences.setMainEngine(this, AsrEnginePreferences.MOONSHINE)
                             sp.edit().putBoolean(MoonshinePreferences.KEY_USE_MOONSHINE_MAIN, true).apply()
                         }

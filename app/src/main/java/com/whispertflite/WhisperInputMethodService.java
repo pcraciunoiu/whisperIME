@@ -131,7 +131,7 @@ public class WhisperInputMethodService extends InputMethodService {
 
         if (AsrEnginePreferences.MOONSHINE.equals(eng)) {
             deinitModel();
-            if (!MoonshineModelFiles.allModelFilesPresent(this)) {
+            if (!MoonshineModelFiles.hasMoonshineBaseModelFilesOnDisk(this)) {
                 switchToPreviousInputMethod();
                 Intent intent = new Intent(this, DownloadActivity.class);
                 intent.putExtra(DownloadActivity.EXTRA_PREFERRED_ENGINE, AsrEnginePreferences.MOONSHINE);

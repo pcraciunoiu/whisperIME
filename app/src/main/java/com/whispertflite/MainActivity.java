@@ -825,7 +825,8 @@ public class MainActivity extends AppCompatActivity {
         boolean whisper = AsrEnginePreferences.WHISPER.equals(engine);
         layoutWhisperModels.setVisibility(whisper ? View.VISIBLE : View.GONE);
         boolean liveOk = AsrEnginePreferences.PARAKEET.equals(engine)
-                || AsrEnginePreferences.MOONSHINE.equals(engine);
+                || AsrEnginePreferences.MOONSHINE.equals(engine)
+                || AsrEnginePreferences.WHISPER.equals(engine);
         liveTranscribe.setEnabled(liveOk);
         liveTranscribe.setAlpha(liveOk ? 1f : 0.45f);
     }
@@ -867,11 +868,15 @@ public class MainActivity extends AppCompatActivity {
             return true;
         }
         if (AsrEnginePreferences.MOONSHINE.equals(eng)) {
-            if (!MoonshineModelFiles.isDeviceSupported(mContext)) {
-                Toast.makeText(this, R.string.moonshine_arm64_only, Toast.LENGTH_LONG).show();
+            if (!MoonshineModelFiles.hasArm64V8aAbi()) {
+                Toast.makeText(this, R.string.moonshine_requires_arm64_device, Toast.LENGTH_LONG).show();
                 return false;
             }
-            if (!MoonshineModelFiles.allModelFilesPresent(mContext)) {
+            if (!MoonshineModelFiles.loadMoonshineNativeLibraries()) {
+                Toast.makeText(this, R.string.moonshine_native_libraries_failed, Toast.LENGTH_LONG).show();
+                return false;
+            }
+            if (!MoonshineModelFiles.hasMoonshineBaseModelFilesOnDisk(mContext)) {
                 Toast.makeText(this, R.string.moonshine_models_missing, Toast.LENGTH_LONG).show();
                 openDownloadForEngine(AsrEnginePreferences.MOONSHINE);
                 return false;
