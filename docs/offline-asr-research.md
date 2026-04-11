@@ -64,8 +64,29 @@ See [parakeet-onnxruntime.md](parakeet-onnxruntime.md) — duplicate `libonnxrun
 
 - [x] Keep README/engine picker to **Whisper + Parakeet + Moonshine** only for now.
 - [x] Reference benchmark app (android-offline-transcribe) documented above under **Reference project**.
-- [ ] Optional spike: sherpa-onnx Zipformer or Whisper-small vs current TFLite (size/latency/WER).
+- [x] Optional spike: sherpa-onnx English streaming Zipformer (dev-only activity; not a fourth engine).
 
 **Integration priority:** see [asr-session-architecture.md](asr-session-architecture.md) (RecognitionService-first; IME secondary).
+
+---
+
+## Sherpa-onnx spike (dev-only, not a product engine)
+
+**Purpose:** Evaluate k2-fsa **sherpa-onnx** JNI + Kotlin API beside existing TFLite Whisper and custom Parakeet/Moonshine ONNX, without adding a user-facing engine or touching `AsrEnginePreferences`.
+
+**AAR / JNI:** Gradle downloads `sherpa-onnx-1.12.36.aar` from [release v1.12.37](https://github.com/k2-fsa/sherpa-onnx/releases/tag/v1.12.37) (`downloadSherpaOnnxAar` in [`app/build.gradle`](../app/build.gradle)). The APK merges **one** `libonnxruntime.so` with Parakeet/Moonshine (Microsoft ORT 1.23.0 via `unpackMicrosoftOrtJni`); sherpa ships its own ORT inside the AAR—`packaging.jniLibs.pickFirst` applies. **Validate on a physical arm64 device** if anything misbehaves at load time.
+
+**Spike model (English streaming Zipformer, `getModelConfig(6)`):**
+
+| | |
+|--|--|
+| **Hugging Face** | [csukuangfj/sherpa-onnx-streaming-zipformer-en-2023-06-26](https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-en-2023-06-26) |
+| **On-device path** | `<getExternalFilesDir>/sherpa-onnx-models/sherpa-onnx-streaming-zipformer-en-2023-06-26/` |
+| **Required files** | `encoder-epoch-99-avg-1-chunk-16-left-128.int8.onnx`, `decoder-epoch-99-avg-1-chunk-16-left-128.onnx`, `joiner-epoch-99-avg-1-chunk-16-left-128.onnx`, `tokens.txt` (same layout as HF repo root; use Git LFS or `huggingface-cli download`). |
+| **Approx. size** | ~350 MB total (large encoders on LFS). |
+
+**Code:** [`SherpaOnnxSpikeActivity`](../app/src/main/java/com/whispertflite/sherpa/SherpaOnnxSpikeActivity.kt), [`SherpaOnnxSpikePaths`](../app/src/main/java/com/whispertflite/sherpa/SherpaOnnxSpikePaths.kt). Debug builds expose a **Sherpa spike** entry on the main screen; release builds hide it.
+
+**Measurements:** Fill in stability/latency/WER after on-device runs (see [wer-benchmark.md](wer-benchmark.md)).
 
 **Last updated:** 2026-04-10
