@@ -24,6 +24,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.InputMethodInfo;
 import android.view.inputmethod.InputMethodManager;
+import android.widget.Adapter;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.CheckBox;
@@ -117,6 +118,8 @@ public class MainActivity extends AppCompatActivity {
     private Spinner spinnerTflite;
     private CountDownTimer countDownTimer;
     private Spinner spinnerLanguage;
+    /** Retained so {@link #refreshWhisperTfliteSpinner()} can update language rules after download. */
+    private LanguagePairAdapter languagePairAdapter;
     private int langToken = -1;
     private long startTime = 0;
     private TextToSpeech tts;
@@ -140,6 +143,12 @@ public class MainActivity extends AppCompatActivity {
         deinitModel();
         deinitTTS();
         super.onDestroy();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        refreshWhisperTfliteSpinner();
     }
 
     @Override
@@ -272,7 +281,7 @@ public class MainActivity extends AppCompatActivity {
 
         spinnerLanguage = findViewById(R.id.spnrLanguage);
         List<Pair<String, String>> languagePairs = LanguagePairAdapter.getLanguagePairs(this);
-        LanguagePairAdapter languagePairAdapter = new LanguagePairAdapter(this, android.R.layout.simple_spinner_item, languagePairs);
+        languagePairAdapter = new LanguagePairAdapter(this, android.R.layout.simple_spinner_item, languagePairs);
         languagePairAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         spinnerLanguage.setAdapter(languagePairAdapter);
 
@@ -291,40 +300,9 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        selectedTfliteFile = WhisperModelSelection.tfliteFileForMainScreen(sdcardDataFolder, sp, MULTI_LINGUAL_TOP_WORLD_SLOW);
-        ArrayAdapter<File> tfliteAdapter = getFileArrayAdapter(tfliteFiles);
-        int position = tfliteAdapter.getPosition(selectedTfliteFile);
         spinnerTflite = findViewById(R.id.spnrTfliteFiles);
-        spinnerTflite.setAdapter(tfliteAdapter);
-        if (tfliteFiles.isEmpty()) {
-            spinnerTflite.setEnabled(false);
-        } else {
-            spinnerTflite.setEnabled(true);
-            spinnerTflite.setSelection(position >= 0 ? position : 0, false);
-            if (position < 0) {
-                selectedTfliteFile = tfliteAdapter.getItem(0);
-                sp.edit().putString(WhisperModelSelection.PREFS_KEY_MAIN_SCREEN, selectedTfliteFile.getName()).apply();
-            }
-        }
-        applyLanguageSpinnerForModelChoice(languagePairAdapter);
-        spinnerTflite.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override
-            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                selectedTfliteFile = (File) parent.getItemAtPosition(position);
-                SharedPreferences.Editor editor = sp.edit();
-                editor.putString(WhisperModelSelection.PREFS_KEY_MAIN_SCREEN, selectedTfliteFile.getName());
-                editor.apply();
-                if (AsrEnginePreferences.WHISPER.equals(AsrEnginePreferences.mainEngine(MainActivity.this))) {
-                    initModel();
-                }
-                applyLanguageSpinnerForModelChoice(languagePairAdapter);
-            }
-
-            @Override
-            public void onNothingSelected(AdapterView<?> parent) {
-                // Handle case when nothing is selected, if needed
-            }
-        });
+        bindWhisperTfliteSpinnerListeners();
+        applyWhisperTfliteSpinnerData();
 
 
         // Implementation of record button functionality
@@ -838,6 +816,14 @@ public class MainActivity extends AppCompatActivity {
                     runOnUiThread(() -> tvStatus.setText(getString(R.string.processing)));
                     startTime = System.currentTimeMillis();
                     runOnUiThread(() -> spinnerTflite.setEnabled(false));
+                } else if (message.equals(Whisper.MSG_PROCESSING_DONE)) {
+                    runOnUiThread(() -> setWhisperModelSpinnerEnabledIfModelsPresent());
+                } else if (message != null && (message.startsWith("Transcription failed")
+                        || message.contains("Engine not initialized"))) {
+                    runOnUiThread(() -> {
+                        processingBar.setIndeterminate(false);
+                        setWhisperModelSpinnerEnabledIfModelsPresent();
+                    });
                 }
             }
 
@@ -930,6 +916,77 @@ public class MainActivity extends AppCompatActivity {
         if (mn.contains("parakeet.streaming") || mn.contains("moonshine")) {
             sp.edit().putString(WhisperModelSelection.PREFS_KEY_MAIN_SCREEN, MULTI_LINGUAL_TOP_WORLD_SLOW).apply();
         }
+    }
+
+    private void bindWhisperTfliteSpinnerListeners() {
+        spinnerTflite.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                selectedTfliteFile = (File) parent.getItemAtPosition(position);
+                SharedPreferences.Editor editor = sp.edit();
+                editor.putString(WhisperModelSelection.PREFS_KEY_MAIN_SCREEN, selectedTfliteFile.getName());
+                editor.apply();
+                if (AsrEnginePreferences.WHISPER.equals(AsrEnginePreferences.mainEngine(MainActivity.this))) {
+                    initModel();
+                }
+                applyLanguageSpinnerForModelChoice(languagePairAdapter);
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {
+            }
+        });
+    }
+
+    /**
+     * Rescans {@code getExternalFilesDir} for *.tflite (e.g. after download). Safe to call from {@link #onResume()}.
+     */
+    private void refreshWhisperTfliteSpinner() {
+        applyWhisperTfliteSpinnerData();
+    }
+
+    private void applyWhisperTfliteSpinnerData() {
+        if (spinnerTflite == null || sdcardDataFolder == null) {
+            return;
+        }
+        maybeMigrateModelNameFromSentinel();
+        ArrayList<File> tfliteFiles = getFilesWithExtension(sdcardDataFolder, ".tflite");
+        selectedTfliteFile = WhisperModelSelection.tfliteFileForMainScreen(sdcardDataFolder, sp, MULTI_LINGUAL_TOP_WORLD_SLOW);
+        ArrayAdapter<File> tfliteAdapter = getFileArrayAdapter(tfliteFiles);
+        spinnerTflite.setAdapter(tfliteAdapter);
+        int position = tfliteAdapter.getPosition(selectedTfliteFile);
+        if (tfliteFiles.isEmpty()) {
+            spinnerTflite.setEnabled(false);
+        } else {
+            spinnerTflite.setEnabled(true);
+            spinnerTflite.setSelection(position >= 0 ? position : 0, false);
+            if (position < 0) {
+                selectedTfliteFile = tfliteAdapter.getItem(0);
+                sp.edit().putString(WhisperModelSelection.PREFS_KEY_MAIN_SCREEN, selectedTfliteFile.getName()).apply();
+            }
+        }
+        applyLanguageSpinnerForModelChoice(languagePairAdapter);
+
+        if (!AsrEnginePreferences.WHISPER.equals(AsrEnginePreferences.mainEngine(this))) {
+            return;
+        }
+        File want = WhisperModelSelection.tfliteFileForMainScreen(sdcardDataFolder, sp, MULTI_LINGUAL_TOP_WORLD_SLOW);
+        if (!want.isFile()) {
+            return;
+        }
+        String cur = mWhisper != null ? mWhisper.getCurrentModelPath() : "";
+        if (mWhisper == null || cur == null || cur.isEmpty() || !want.getAbsolutePath().equals(cur)) {
+            initModel();
+        }
+    }
+
+    private void setWhisperModelSpinnerEnabledIfModelsPresent() {
+        if (spinnerTflite == null) {
+            return;
+        }
+        Adapter ad = spinnerTflite.getAdapter();
+        int n = ad != null ? ad.getCount() : 0;
+        spinnerTflite.setEnabled(n > 0);
     }
 
     private void applyEngineUiMode(String engine) {
@@ -1105,6 +1162,7 @@ public class MainActivity extends AppCompatActivity {
     private void stopProcessing() {
         stopMainWhisperLivePreview();
         processingBar.setIndeterminate(false);
+        runOnUiThread(this::setWhisperModelSpinnerEnabledIfModelsPresent);
         if (moonshineMainRecorder != null) {
             moonshineMainRecorder.stop();
             moonshineMainRecorder = null;
