@@ -403,7 +403,7 @@ public class MainActivity extends AppCompatActivity {
                                         moveCursorToEnd(tvResult);
                                     });
                                 }
-                            });
+                            }, live);
                     if (!parakeetMainRecorder.start()) {
                         Toast.makeText(this, R.string.parakeet_start_failed, Toast.LENGTH_SHORT).show();
                         parakeetMainRecorder = null;

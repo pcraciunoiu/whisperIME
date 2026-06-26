@@ -122,7 +122,7 @@ public class WhisperRecognitionService extends RecognitionService {
                         } catch (RemoteException e) {
                             throw new RuntimeException(e);
                         }
-                    });
+                    }, livePartials);
             if (parakeetRecognitionRecorder.start()) {
                 Log.d(TAG, "parakeet recorder started");
                 try {

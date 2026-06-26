@@ -400,7 +400,8 @@ public class WhisperInputMethodService extends InputMethodService {
                     if (checkRecordPermission()) {
                         HapticFeedback.vibrate(this);
                         imeParakeetRecorder = new ParakeetStreamingRecorder(this, sdcardDataFolder, handler,
-                                partial -> handler.post(() -> applyLiveImePartial(partial, liveImePartials)));
+                                partial -> handler.post(() -> applyLiveImePartial(partial, liveImePartials)),
+                                liveImePartials);
                         if (!imeParakeetRecorder.start()) {
                             imeParakeetRecorder = null;
                         }
