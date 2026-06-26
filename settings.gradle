@@ -11,6 +11,8 @@ dependencyResolutionManagement {
         google()
         mavenCentral()
         maven { url 'https://jitpack.io' }
+        // Vendored sherpa-onnx AAR (NVIDIA Parakeet offline ASR). Not on Maven Central.
+        flatDir { dirs "$rootDir/app/libs" }
     }
 }
 rootProject.name = "WhisperIME"

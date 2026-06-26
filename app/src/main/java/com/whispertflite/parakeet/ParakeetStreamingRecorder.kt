@@ -15,10 +15,14 @@ import com.whispertflite.asr.RnnoiseDenoiser
 import java.io.File
 import java.util.function.Consumer
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.math.min
 
 /**
- * Pushes [ParakeetConstants.CHUNK_PCM_SAMPLES] frames of 16 kHz mono PCM to the engine;
- * posts partial transcripts on [mainHandler].
+ * Hold-to-talk recorder for the offline sherpa-onnx Parakeet engine. Captures 16 kHz mono PCM while held
+ * and decodes the whole utterance once on release (Parakeet TDT is an offline/batch model). The model is
+ * loaded in parallel with capture so the first words aren't lost to a cold start.
+ *
+ * Class/method names kept stable so MainActivity / IME / RecognitionService need no changes.
  */
 class ParakeetStreamingRecorder(
     private val context: Context,
@@ -26,21 +30,15 @@ class ParakeetStreamingRecorder(
     private val mainHandler: Handler,
     private val onPartial: Consumer<String>,
 ) {
-    @Volatile
-    private var engine: ParakeetStreamingEngine? = null
     private var worker: Thread? = null
     private val running = AtomicBoolean(false)
-    private var audioChunksFed = 0
-    @Volatile
-    private var loggedFirstNonEmptyPartial = false
 
-    /** Set in the worker [finally] after the last [ParakeetStreamingEngine.snapshotTranscript], before [releaseAfterHold]. */
     @Volatile
-    private var workerFinalTranscript: String? = null
+    private var lastTranscript: String = ""
 
     fun start(): Boolean {
         if (!ParakeetModelFiles.allOnnxPresent(modelsDir)) {
-            Log.w(TAG, "start() aborted: ONNX models missing under $modelsDir")
+            Log.w(TAG, "start() aborted: model files missing under $modelsDir")
             return false
         }
         if (ActivityCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) !=
@@ -49,13 +47,10 @@ class ParakeetStreamingRecorder(
             Log.w(TAG, "start() aborted: RECORD_AUDIO not granted")
             return false
         }
-        // Serialize with previous session so we never run two workers or leak an engine.
         stop(join = true)
-        audioChunksFed = 0
-        loggedFirstNonEmptyPartial = false
-        workerFinalTranscript = null
+        lastTranscript = ""
         running.set(true)
-        worker = Thread({ recordLoop() }, "ParakeetStream").also { it.start() }
+        worker = Thread({ recordLoop() }, "ParakeetBatch").also { it.start() }
         Log.d(TAG, "start() worker thread scheduled")
         return true
     }
@@ -65,66 +60,98 @@ class ParakeetStreamingRecorder(
         running.set(false)
         if (join) {
             try {
-                worker?.join(8000)
+                // Generous: the worker decodes the full utterance after capture ends before returning.
+                worker?.join(120_000)
             } catch (_: InterruptedException) {
                 Thread.currentThread().interrupt()
             }
         }
         worker = null
-        val wf = workerFinalTranscript
-        workerFinalTranscript = null
-        val last =
-            wf ?: try {
-                engine?.snapshotTranscript() ?: ""
-            } catch (_: Exception) {
-                ""
-            }
-        engine = null
-        Log.i(
-            TAG,
-            "stop() finalLen=${last.length} fullChunks=$audioChunksFed preview=\"${last.take(80)}\"",
-        )
+        val last = lastTranscript
+        Log.i(TAG, "stop() finalLen=${last.length} preview=\"${last.take(80)}\"")
         return last
     }
 
+    /** Final transcript only exists after decode; live snapshots aren't available for the batch engine. */
+    fun snapshotTranscript(): String = lastTranscript
+
     private fun recordLoop() {
-        if (Log.isLoggable(TAG, Log.DEBUG)) Log.d(TAG, "worker: ParakeetStream thread started")
-        val t0 = android.os.SystemClock.elapsedRealtime()
         ParakeetEnginePool.lockSession()
         var eng: ParakeetStreamingEngine? = null
-        try {
+        // Load the recognizer in parallel with mic capture so a cold start doesn't drop the opening words.
+        val loadThread = Thread({
             eng = try {
-                ParakeetEnginePool.borrowEngine(context.applicationContext, modelsDir).also { it.resetSession() }
+                ParakeetEnginePool.borrowEngine(context.applicationContext, modelsDir)
             } catch (e: Exception) {
-                Log.e(TAG, "ONNX load failed", e)
-                running.set(false)
-                return
+                Log.e(TAG, "engine load failed", e)
+                null
             }
-            engine = eng
-            if (Log.isLoggable(TAG, Log.DEBUG)) {
-                Log.d(TAG, "worker: engine ready in ${android.os.SystemClock.elapsedRealtime() - t0}ms")
-            }
-            if (!running.get()) {
-                Log.w(TAG, "worker: stop before mic — finger up during model load? (no audio processed)")
-                return
-            }
+        }, "ParakeetLoad").also { it.start() }
 
-            if (ActivityCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) !=
-                PackageManager.PERMISSION_GRANTED
-            ) {
-                running.set(false)
+        try {
+            val captured = captureUtterance()
+            try {
+                loadThread.join(120_000)
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+            }
+            val e = eng
+            if (e == null) {
+                Log.w(TAG, "no engine (load failed); dropped ${captured.length} samples")
+                lastTranscript = ""
                 return
             }
+            if (captured.length <= 0) {
+                Log.w(TAG, "no audio captured")
+                lastTranscript = ""
+                return
+            }
+            val floats = FloatArray(captured.length) { captured.buffer[it] / 32768f }
+            val t0 = android.os.SystemClock.elapsedRealtime()
+            val text = e.transcribe(floats).trim()
+            lastTranscript = text
+            Log.i(
+                TAG,
+                "decoded samples=${captured.length} (${captured.length / ParakeetConstants.SAMPLE_RATE}s) " +
+                    "in ${android.os.SystemClock.elapsedRealtime() - t0}ms textLen=${text.length} " +
+                    "preview=\"${text.take(64)}\"",
+            )
+            if (text.isNotEmpty()) {
+                mainHandler.post { onPartial.accept(text) }
+            }
+        } finally {
+            try {
+                loadThread.join(120_000)
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+            }
+            ParakeetEnginePool.releaseAfterHold(eng)
+            ParakeetEnginePool.unlockSession()
+        }
+    }
 
-            val sampleRate = ParakeetConstants.SAMPLE_RATE
-            val channelConfig = AudioFormat.CHANNEL_IN_MONO
-            val audioFormat = AudioFormat.ENCODING_PCM_16BIT
+    private class Captured(val buffer: ShortArray, val length: Int)
+
+    /** Records 16 kHz mono PCM (with optional denoise) into a growing buffer until [running] clears. */
+    private fun captureUtterance(): Captured {
+        val sampleRate = ParakeetConstants.SAMPLE_RATE
+        val channelConfig = AudioFormat.CHANNEL_IN_MONO
+        val audioFormat = AudioFormat.ENCODING_PCM_16BIT
+        val maxSamples = sampleRate * ParakeetConstants.MAX_RECORD_SECONDS
+        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        var record: AudioRecord? = null
+        var captureEffects: AudioCaptureEffects? = null
+        var rnnoise: RnnoiseDenoiser? = null
+        var scoStarted = false
+        var accum = ShortArray(min(sampleRate * 4, maxSamples))
+        var len = 0
+        try {
             val minBuf = AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat)
-            val bufferSize = maxOf(minBuf, 4096)
-            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            val bufferSize = maxOf(minBuf, sampleRate * 2 * 2) // ~2 s headroom
             audioManager.startBluetoothSco()
             audioManager.isBluetoothScoOn = true
-            val record = try {
+            scoStarted = true
+            val rec = try {
                 AudioRecord.Builder()
                     .setAudioSource(AudioCapturePreferences.audioSource(context))
                     .setAudioFormat(
@@ -139,136 +166,61 @@ class ParakeetStreamingRecorder(
             } catch (e: Exception) {
                 Log.e(TAG, "AudioRecord build failed", e)
                 running.set(false)
-                return
+                return Captured(accum, 0)
             }
-            if (record.state != AudioRecord.STATE_INITIALIZED) {
-                Log.e(TAG, "AudioRecord not initialized state=${record.state}")
+            record = rec
+            if (rec.state != AudioRecord.STATE_INITIALIZED) {
+                Log.e(TAG, "AudioRecord not initialized state=${rec.state}")
                 running.set(false)
-                return
+                return Captured(accum, 0)
             }
-            val captureEffects =
-                AudioCaptureEffects.attachIfRequested(
-                    record,
-                    AudioCapturePreferences.platformNoiseSuppressorEnabled(context),
-                    AudioCapturePreferences.platformAecEnabled(context),
-                )
-            val rnnoise = RnnoiseDenoiser.createIfEnabled(context)
-            record.startRecording()
-            Log.i(TAG, "mic recording started (16 kHz mono); chunkSamples=${ParakeetConstants.CHUNK_PCM_SAMPLES}")
-            val pcmEngine = eng!!
+            captureEffects = AudioCaptureEffects.attachIfRequested(
+                rec,
+                AudioCapturePreferences.platformNoiseSuppressorEnabled(context),
+                AudioCapturePreferences.platformAecEnabled(context),
+            )
+            rnnoise = RnnoiseDenoiser.createIfEnabled(context)
+            rec.startRecording()
+            Log.i(TAG, "mic recording started (16 kHz mono)")
             val readBuf = ShortArray(2048)
-            val chunk = ShortArray(ParakeetConstants.CHUNK_PCM_SAMPLES)
-            var filled = 0
-            /** When the model emits a fresh segment after silence, merge with prior text for this hold. */
-            var streamedStitch = ""
-            var stitchLogBudget = 5
-            try {
-                while (running.get()) {
-                    val n = record.read(readBuf, 0, readBuf.size)
-                    if (n < 0) {
-                        Log.w(TAG, "worker: AudioRecord.read error n=$n")
-                        break
-                    }
-                    if (n == 0) continue
-                    rnnoise?.processBuffer(readBuf, n)
-                    var i = 0
-                    while (i < n && running.get()) {
-                        val need = ParakeetConstants.CHUNK_PCM_SAMPLES - filled
-                        val take = minOf(need, n - i)
-                        System.arraycopy(readBuf, i, chunk, filled, take)
-                        filled += take
-                        i += take
-                        if (filled == ParakeetConstants.CHUNK_PCM_SAMPLES) {
-                            audioChunksFed++
-                            val text = try {
-                                pcmEngine.processPcm16Chunk(chunk)
-                            } catch (e: Exception) {
-                                Log.e(TAG, "processPcm16Chunk failed", e)
-                                ""
-                            }
-                            val prevStitch = streamedStitch
-                            streamedStitch = stitchStreamingPartials(streamedStitch, text)
-                            if (Log.isLoggable(TAG, Log.DEBUG) && stitchLogBudget > 0 &&
-                                prevStitch.isNotBlank() && text.isNotBlank()
-                            ) {
-                                stitchLogBudget--
-                                Log.d(
-                                    TAG,
-                                    "stitch chunk#$audioChunksFed raw=\"${text.trim().take(48)}\" " +
-                                        "cumulative=\"${streamedStitch.take(64)}\"",
-                                )
-                            }
-                            if (streamedStitch.isNotBlank() && !loggedFirstNonEmptyPartial) {
-                                loggedFirstNonEmptyPartial = true
-                                Log.i(
-                                    TAG,
-                                    "first non-empty partial chunk#$audioChunksFed len=${streamedStitch.length} " +
-                                        "preview=\"${streamedStitch.take(48)}\"",
-                                )
-                            }
-                            mainHandler.post { onPartial.accept(streamedStitch) }
-                            filled = 0
-                        }
-                    }
+            while (running.get() && len < maxSamples) {
+                val n = rec.read(readBuf, 0, readBuf.size)
+                if (n < 0) {
+                    Log.w(TAG, "AudioRecord.read error n=$n")
+                    break
                 }
-            } finally {
-                if (filled > 0) {
-                    chunk.fill(0.toShort(), filled, chunk.size)
-                    try {
-                        val text = pcmEngine.processPcm16Chunk(chunk)
-                        streamedStitch = stitchStreamingPartials(streamedStitch, text)
-                        mainHandler.post { onPartial.accept(streamedStitch) }
-                    } catch (e: Exception) {
-                        Log.e(TAG, "partial flush processPcm16Chunk failed", e)
-                    }
+                if (n == 0) continue
+                rnnoise?.processBuffer(readBuf, n)
+                val room = maxSamples - len
+                val take = min(n, room)
+                if (len + take > accum.size) {
+                    val newCap = min((accum.size * 2).coerceAtLeast(len + take), maxSamples)
+                    accum = accum.copyOf(newCap)
                 }
-                rnnoise?.release()
+                System.arraycopy(readBuf, 0, accum, len, take)
+                len += take
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "capture failed", e)
+        } finally {
+            rnnoise?.release()
+            if (record != null) {
                 try {
                     record.stop()
                 } catch (_: Exception) {
                 }
                 captureEffects?.release()
                 record.release()
+            }
+            if (scoStarted) {
                 audioManager.stopBluetoothSco()
                 audioManager.isBluetoothScoOn = false
             }
-        } finally {
-            try {
-                workerFinalTranscript = try {
-                    eng?.snapshotTranscript() ?: ""
-                } catch (_: Exception) {
-                    ""
-                }
-            } finally {
-                ParakeetEnginePool.releaseAfterHold(eng)
-                engine = null
-                ParakeetEnginePool.unlockSession()
-            }
         }
+        return Captured(accum, len)
     }
 
     companion object {
         private const val TAG = "ParakeetASR"
-
-        /** Cumulative streaming text; if a chunk starts a disjoint hypothesis after a pause, append it. */
-        private fun stitchStreamingPartials(prev: String, incoming: String): String {
-            val inc = incoming.trim()
-            if (inc.isEmpty()) return prev
-            val p = prev.trim()
-            if (p.isEmpty()) return inc
-            if (inc.startsWith(p)) return inc
-            if (p.startsWith(inc)) return inc
-            return "$p $inc".trim()
-        }
-    }
-
-    /** Last partial text from engine (call before [stop] closes engine). */
-    fun snapshotTranscript(): String {
-        val e = engine ?: return ""
-        return try {
-            e.snapshotTranscript()
-        } catch (_: Exception) {
-            ""
-        }
     }
 }

@@ -10,6 +10,15 @@ import java.io.FileOutputStream
 import java.net.URL
 import java.net.URLConnection
 
+/**
+ * Downloads the sherpa-onnx Parakeet model files individually from the Hugging Face mirror.
+ *
+ * Each file is streamed to a `.part` temp file, verified against its exact expected size, then
+ * atomically renamed into place. Only after *all* files pass is the
+ * [ParakeetConstants.READY_MARKER_FILE] marker written. [ParakeetModelFiles.allOnnxPresent] gates
+ * model loading on that marker, so an interrupted/corrupt download can never reach sherpa-onnx's
+ * native loader (which aborts the whole process on a bad .onnx).
+ */
 object ParakeetDownloader {
     private const val TAG = "ParakeetDownloader"
 
@@ -20,30 +29,11 @@ object ParakeetDownloader {
         sizeView: TextView?,
         onDone: Runnable,
     ) {
-        val dir = activity.getExternalFilesDir(null) ?: return
+        val baseDir = activity.getExternalFilesDir(null) ?: return
         Thread {
             try {
-                val enc = ParakeetModelFiles.encoderFile(dir)
-                val dec = ParakeetModelFiles.decoderFile(dir)
-                val totalEst = 650_000_000L + 10_000_000L
-                var done = 0L
-                if (!enc.isFile || enc.length() < 10_000_000L) {
-                    downloadFile(ParakeetConstants.ENCODER_URL, enc) { n ->
-                        done += n
-                        activity.runOnUiThread {
-                            sizeView?.text = "${done / 1024 / 1024} MB"
-                            progressBar?.progress = ((done * 100) / totalEst).toInt().coerceIn(0, 99)
-                        }
-                    }
-                }
-                if (!dec.isFile || dec.length() < 1000L) {
-                    downloadFile(ParakeetConstants.DECODER_URL, dec) { n ->
-                        done += n
-                        activity.runOnUiThread {
-                            sizeView?.text = "${done / 1024 / 1024} MB"
-                            progressBar?.progress = ((done * 100) / totalEst).toInt().coerceIn(0, 99)
-                        }
-                    }
+                if (!ParakeetModelFiles.allOnnxPresent(baseDir)) {
+                    downloadAll(activity, progressBar, sizeView, baseDir)
                 }
                 activity.runOnUiThread {
                     progressBar?.progress = 100
@@ -56,20 +46,82 @@ object ParakeetDownloader {
         }.start()
     }
 
-    private fun downloadFile(urlStr: String, outFile: File, onBytes: (Long) -> Unit) {
-        val url = URL(urlStr)
-        val ucon: URLConnection = url.openConnection()
+    private fun downloadAll(
+        activity: Activity,
+        progressBar: ProgressBar?,
+        sizeView: TextView?,
+        baseDir: File,
+    ) {
+        val modelDir = File(baseDir, ParakeetConstants.MODEL_DIR)
+        modelDir.mkdirs()
+
+        // Stale/partial state from a previous interrupted run must not survive: drop the marker so a
+        // crash mid-download leaves the model definitively "not present".
+        ParakeetModelFiles.readyMarkerFile(baseDir).delete()
+
+        val total = ParakeetConstants.MODEL_TOTAL_BYTES
+        var completed = 0L
+
+        for (spec in ParakeetConstants.MODEL_FILES) {
+            val target = File(modelDir, spec.name)
+            // Skip files already correct from a partially-finished prior run.
+            if (target.isFile && target.length() == spec.sizeBytes) {
+                completed += spec.sizeBytes
+                continue
+            }
+
+            val part = File(modelDir, "${spec.name}.part")
+            part.delete()
+            downloadFile(activity, progressBar, sizeView, spec, part, completed, total)
+
+            if (part.length() != spec.sizeBytes) {
+                part.delete()
+                throw IllegalStateException(
+                    "Size mismatch for ${spec.name}: got ${part.length()}, expected ${spec.sizeBytes}",
+                )
+            }
+            target.delete()
+            if (!part.renameTo(target)) {
+                part.delete()
+                throw IllegalStateException("Failed to move ${spec.name} into place")
+            }
+            completed += spec.sizeBytes
+        }
+
+        // Everything verified: publish the marker so the model becomes loadable.
+        ParakeetModelFiles.readyMarkerFile(baseDir).writeText("ok")
+    }
+
+    private fun downloadFile(
+        activity: Activity,
+        progressBar: ProgressBar?,
+        sizeView: TextView?,
+        spec: ParakeetConstants.ModelFile,
+        part: File,
+        priorCompleted: Long,
+        total: Long,
+    ) {
+        val ucon: URLConnection = URL(spec.url).openConnection()
         ucon.connectTimeout = 15_000
         ucon.readTimeout = 60_000
         ucon.getInputStream().use { raw ->
-            BufferedInputStream(raw, 8192).use { ins ->
-                FileOutputStream(outFile).use { fos ->
-                    val buf = ByteArray(8192)
+            BufferedInputStream(raw, 1 shl 16).use { ins ->
+                FileOutputStream(part).use { fos ->
+                    val buf = ByteArray(1 shl 16)
+                    var fileDone = 0L
                     while (true) {
                         val r = ins.read(buf)
                         if (r <= 0) break
                         fos.write(buf, 0, r)
-                        onBytes(r.toLong())
+                        fileDone += r
+                        val overall = priorCompleted + fileDone
+                        val mb = overall / 1024 / 1024
+                        val totalMb = total / 1024 / 1024
+                        val pct = ((overall * 100) / total).toInt().coerceIn(0, 100)
+                        activity.runOnUiThread {
+                            sizeView?.text = "$mb / $totalMb MB"
+                            progressBar?.progress = pct
+                        }
                     }
                     fos.flush()
                 }
