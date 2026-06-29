@@ -45,6 +45,8 @@ public class Recorder {
     private final Lock lock = new ReentrantLock();
     private final Condition hasTask = lock.newCondition();
     private final Object fileSavedLock = new Object(); // Lock object for wait/notify
+    private boolean recordingFinished = false; // guarded by fileSavedLock; prevents lost-wakeup hang in stop()
+    private static final long STOP_WAIT_TIMEOUT_MS = 3000;
     private final Object livePcmLock = new Object();
     /** Non-null only while {@link #recordAudio()} is capturing; used for Whisper live preview. */
     private ByteArrayOutputStream mActivePcmBuffer;
@@ -74,6 +76,9 @@ public class Recorder {
             Log.d(TAG, "Recording is already in progress...");
             return;
         }
+        synchronized (fileSavedLock) {
+            recordingFinished = false;
+        }
         lock.lock();
         try {
             Log.d(TAG, "Recording starts now");
@@ -101,12 +106,23 @@ public class Recorder {
         Log.d(TAG, "Recording stopped");
         mInProgress.set(false);
 
-        // Wait for the recording thread to finish
+        // Wait for the recording thread to finish. Use a guard flag + timeout so a notify() that fires
+        // before we start waiting (lost wakeup) — or a worker that exits early without notifying — can
+        // never wedge the caller (often the IME main thread) forever, which the system kills as an ANR.
         synchronized (fileSavedLock) {
-            try {
-                fileSavedLock.wait(); // Wait until notified by the recording thread
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt(); // Restore interrupted status
+            long deadline = System.currentTimeMillis() + STOP_WAIT_TIMEOUT_MS;
+            while (!recordingFinished) {
+                long remaining = deadline - System.currentTimeMillis();
+                if (remaining <= 0) {
+                    Log.w(TAG, "stop() timed out waiting for recorder thread to finish");
+                    break;
+                }
+                try {
+                    fileSavedLock.wait(remaining);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt(); // Restore interrupted status
+                    break;
+                }
             }
         }
     }
@@ -154,6 +170,12 @@ public class Recorder {
                 sendUpdate(e.getMessage());
             } finally {
                 mInProgress.set(false);
+                // Release any thread blocked in stop() on every exit path (success, early return, or
+                // exception) so a missed notify can never leave the caller waiting indefinitely.
+                synchronized (fileSavedLock) {
+                    recordingFinished = true;
+                    fileSavedLock.notifyAll();
+                }
             }
         }
     }
@@ -286,12 +308,7 @@ public class Recorder {
         } else {
             sendUpdate(MSG_RECORDING_ERROR);
         }
-
-        // Notify the waiting thread that recording is complete
-        synchronized (fileSavedLock) {
-            fileSavedLock.notify(); // Notify that recording is finished
-        }
-
+        // Waiters in stop() are released by recordLoop's finally block on every exit path.
     }
 
 }

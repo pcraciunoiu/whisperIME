@@ -559,6 +559,7 @@ public class WhisperInputMethodService extends InputMethodService {
                 final boolean hadLiveWhisperPartials = imeWhisperHadLivePartials;
                 imeWhisperHadLivePartials = false;
                 handler.post(() -> {
+                  try {
                     processingBar.setIndeterminate(false);
                     tvStatus.setText("");
                     tvStatus.setVisibility(View.GONE);
@@ -594,6 +595,9 @@ public class WhisperInputMethodService extends InputMethodService {
                     if (modeAuto && commitSuccess) {
                         handler.postDelayed(() -> switchToPreviousInputMethod(), 100);
                     }
+                  } catch (Throwable th) {
+                    Log.e(TAG, "onResultReceived: applying transcript failed", th);
+                  }
                 });
             }
         });
@@ -651,6 +655,7 @@ public class WhisperInputMethodService extends InputMethodService {
      * so the composing span is replaced once (finishComposingText + commitText duplicated the phrase).
      */
     private void applyLiveImePartial(String partial, boolean liveImePartials) {
+      try {
         if (!liveImePartials) return;
         // The final transcript is delivered through this same channel and can arrive (re-posted) after the
         // hold was committed; applying it here would re-create a duplicate composing copy. Drop it.
@@ -681,6 +686,9 @@ public class WhisperInputMethodService extends InputMethodService {
             return;
         }
         ic.setComposingText(partial, 1);
+      } catch (Throwable th) {
+        Log.e(TAG, "applyLiveImePartial failed", th);
+      }
     }
 
     private static String summarizeForLog(String s) {
@@ -698,6 +706,7 @@ public class WhisperInputMethodService extends InputMethodService {
                     + (fin != null ? fin.length() : -1));
             return;
         }
+      try {
         String t = fin.trim();
         Set<String> undo = VoiceCommandPreferences.normalizedUndoPhrases(sp);
         Set<String> nl = VoiceCommandPreferences.normalizedNewlinePhrases(sp);
@@ -741,6 +750,9 @@ public class WhisperInputMethodService extends InputMethodService {
         } else {
             Log.d(TAG, "commitHoldTranscription: empty transcript, no live composing (check mic/engine)");
         }
+      } catch (Throwable th) {
+        Log.e(TAG, "commitHoldTranscription failed", th);
+      }
     }
 
     private void deinitModel() {
