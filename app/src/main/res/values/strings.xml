@@ -12,6 +12,13 @@
     <string name="model_choice_moonshine">Moonshine Base (English)</string>
     <string name="wizard_model_type">Model type</string>
     <string name="asr_engine">Speech engine</string>
+    <string name="audio_capture_source">Mic source</string>
+    <string name="audio_capture_source_voice_recognition">Voice recognition (ASR)</string>
+    <string name="audio_capture_source_voice_communication">Voice communication (VoIP-style)</string>
+    <string name="audio_capture_oem_note">OEM behavior varies (especially in-car / Bluetooth). Voice communication may enable stronger hardware DSP; combining with platform noise suppression can be redundant on some devices.</string>
+    <string name="audio_platform_noise_suppressor">Platform noise suppressor</string>
+    <string name="audio_platform_aec">Platform echo canceler</string>
+    <string name="audio_rnnoise">RNNoise denoiser (experimental)</string>
     <string name="engine_whisper">Whisper (TFLite)</string>
     <string name="engine_parakeet">Parakeet (ONNX, English)</string>
     <string name="engine_moonshine">Moonshine Base (English)</string>

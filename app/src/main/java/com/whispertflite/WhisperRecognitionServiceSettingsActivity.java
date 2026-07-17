@@ -25,6 +25,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
 import androidx.preference.PreferenceManager;
 
+import com.whispertflite.asr.AudioCaptureUi;
 import com.whispertflite.asr.WhisperModelSelection;
 import com.whispertflite.utils.Downloader;
 import com.whispertflite.utils.LanguagePairAdapter;
@@ -128,6 +129,18 @@ public class WhisperRecognitionServiceSettingsActivity extends AppCompatActivity
             @Override
             public void onNothingSelected(AdapterView<?> parent) {}
         });
+
+        {
+            Spinner spinnerAudioCapture = findViewById(R.id.spinnerAudioCaptureSource);
+            CheckBox cbAudioNs = findViewById(R.id.mode_audio_platform_ns);
+            CheckBox cbAudioAec = findViewById(R.id.mode_audio_platform_aec);
+            CheckBox cbAudioRnnoise = findViewById(R.id.mode_audio_rnnoise);
+            ArrayAdapter<CharSequence> audioSrcAdapter = ArrayAdapter.createFromResource(this,
+                    R.array.audio_capture_source_entries, android.R.layout.simple_spinner_item);
+            audioSrcAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+            spinnerAudioCapture.setAdapter(audioSrcAdapter);
+            AudioCaptureUi.bindSpinnerAndToggles(this, sp, spinnerAudioCapture, cbAudioNs, cbAudioAec, cbAudioRnnoise);
+        }
 
         modeSimpleChinese = findViewById(R.id.mode_simple_chinese);
         modeSimpleChinese.setChecked(sp.getBoolean("RecognitionServiceSimpleChinese",false));  //default to traditional Chinese

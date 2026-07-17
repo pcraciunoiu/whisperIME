@@ -53,4 +53,13 @@
         <item>@string/engine_parakeet</item>
         <item>@string/engine_moonshine</item>
     </string-array>
+
+    <string-array name="audio_capture_source_values" translatable="false">
+        <item>voice_recognition</item>
+        <item>voice_communication</item>
+    </string-array>
+    <string-array name="audio_capture_source_entries">
+        <item>@string/audio_capture_source_voice_recognition</item>
+        <item>@string/audio_capture_source_voice_communication</item>
+    </string-array>
 </resources>

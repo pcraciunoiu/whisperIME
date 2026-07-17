@@ -80,6 +80,13 @@ public class WhisperInputMethodService extends InputMethodService {
     private boolean imeVoiceCommandConsumed = false;
     /** Whisper live composing was active; final commit uses {@link #commitHoldTranscription}. */
     private boolean imeWhisperHadLivePartials = false;
+    /**
+     * Set once a hold's final transcript has been committed. The engine recorders deliver the final
+     * result through the same {@code onPartial} channel as live partials, and handler indirection can let
+     * that final partial's {@link InputConnection#setComposingText} land AFTER the commit — re-creating a
+     * duplicate (composing) copy of the just-committed text. Ignoring partials once finalized prevents it.
+     */
+    private boolean imeHoldFinalized = false;
 
     private boolean useMoonshineImeNow() {
         return OfflineAsrEngines.moonshineSelectedAndReady(this);
@@ -354,6 +361,9 @@ public class WhisperInputMethodService extends InputMethodService {
 
         btnRecord.setOnTouchListener((v, event) -> {
             boolean liveImePartials = LiveTranscribePreferences.isEnabled(sp);
+            if (event.getAction() == MotionEvent.ACTION_DOWN) {
+                imeHoldFinalized = false;
+            }
             if (useMoonshineImeNow()) {
                 if (event.getAction() == MotionEvent.ACTION_DOWN) {
                     imeVoiceCommandConsumed = false;
@@ -400,7 +410,8 @@ public class WhisperInputMethodService extends InputMethodService {
                     if (checkRecordPermission()) {
                         HapticFeedback.vibrate(this);
                         imeParakeetRecorder = new ParakeetStreamingRecorder(this, sdcardDataFolder, handler,
-                                partial -> handler.post(() -> applyLiveImePartial(partial, liveImePartials)));
+                                partial -> handler.post(() -> applyLiveImePartial(partial, liveImePartials)),
+                                liveImePartials);
                         if (!imeParakeetRecorder.start()) {
                             imeParakeetRecorder = null;
                         }
@@ -548,6 +559,7 @@ public class WhisperInputMethodService extends InputMethodService {
                 final boolean hadLiveWhisperPartials = imeWhisperHadLivePartials;
                 imeWhisperHadLivePartials = false;
                 handler.post(() -> {
+                  try {
                     processingBar.setIndeterminate(false);
                     tvStatus.setText("");
                     tvStatus.setVisibility(View.GONE);
@@ -583,6 +595,9 @@ public class WhisperInputMethodService extends InputMethodService {
                     if (modeAuto && commitSuccess) {
                         handler.postDelayed(() -> switchToPreviousInputMethod(), 100);
                     }
+                  } catch (Throwable th) {
+                    Log.e(TAG, "onResultReceived: applying transcript failed", th);
+                  }
                 });
             }
         });
@@ -640,7 +655,11 @@ public class WhisperInputMethodService extends InputMethodService {
      * so the composing span is replaced once (finishComposingText + commitText duplicated the phrase).
      */
     private void applyLiveImePartial(String partial, boolean liveImePartials) {
+      try {
         if (!liveImePartials) return;
+        // The final transcript is delivered through this same channel and can arrive (re-posted) after the
+        // hold was committed; applying it here would re-create a duplicate composing copy. Drop it.
+        if (imeHoldFinalized) return;
         InputConnection ic = getCurrentInputConnection();
         if (ic == null) {
             Log.d(TAG, "scratch/live partial: InputConnection null (field may have lost focus)");
@@ -667,6 +686,9 @@ public class WhisperInputMethodService extends InputMethodService {
             return;
         }
         ic.setComposingText(partial, 1);
+      } catch (Throwable th) {
+        Log.e(TAG, "applyLiveImePartial failed", th);
+      }
     }
 
     private static String summarizeForLog(String s) {
@@ -676,11 +698,15 @@ public class WhisperInputMethodService extends InputMethodService {
     }
 
     private void commitHoldTranscription(InputConnection ic, String fin, boolean hadLivePartials) {
+        // Mark the hold finalized so any late live partial (the final transcript re-posted through the
+        // partial channel) is ignored instead of re-creating a duplicate composing copy.
+        imeHoldFinalized = true;
         if (ic == null) {
             Log.w(TAG, "commitHoldTranscription: InputConnection null (lost focus?); fin.length="
                     + (fin != null ? fin.length() : -1));
             return;
         }
+      try {
         String t = fin.trim();
         Set<String> undo = VoiceCommandPreferences.normalizedUndoPhrases(sp);
         Set<String> nl = VoiceCommandPreferences.normalizedNewlinePhrases(sp);
@@ -724,6 +750,9 @@ public class WhisperInputMethodService extends InputMethodService {
         } else {
             Log.d(TAG, "commitHoldTranscription: empty transcript, no live composing (check mic/engine)");
         }
+      } catch (Throwable th) {
+        Log.e(TAG, "commitHoldTranscription failed", th);
+      }
     }
 
     private void deinitModel() {

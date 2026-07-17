@@ -45,8 +45,10 @@ public class WhisperEngineJava implements WhisperEngine {
         return mIsInitialized;
     }
 
+    // synchronized so model (re)load can never overlap an in-flight decode on another thread; the
+    // inference paths lock on this same engine instance (see Whisper#processRecordBuffer / transcribeLivePreview).
     @Override
-    public void initialize(String modelPath, String vocabPath, boolean multilingual) throws IOException {
+    public synchronized void initialize(String modelPath, String vocabPath, boolean multilingual) throws IOException {
         // Load model
         loadModel(modelPath);
         if (BuildConfig.DEBUG) Log.d(TAG, "Model is loaded..." + modelPath);
@@ -63,9 +65,13 @@ public class WhisperEngineJava implements WhisperEngine {
 
     }
 
-    // Unload the model by closing the interpreter
+    // Unload the model by closing the interpreter.
+    // synchronized: closing the interpreter while another thread is inside runSignature() is a native
+    // use-after-free (SIGSEGV) that hard-kills the process. Sharing the engine-instance monitor with the
+    // inference paths makes deinit wait for any in-flight decode to finish first.
     @Override
-    public void deinitialize() {
+    public synchronized void deinitialize() {
+        mIsInitialized = false;
         if (mInterpreter != null) {
             mInterpreter.setCancelled(true);
             mInterpreter.close();

@@ -178,7 +178,7 @@ public class WhisperRecognizeActivity extends AppCompatActivity {
                     if (checkRecordPermission()) {
                         HapticFeedback.vibrate(this);
                         parakeetOverlayRecorder = new ParakeetStreamingRecorder(mContext, sdcardDataFolder, mainHandler,
-                                partial -> { });
+                                partial -> { }, false);
                         if (!parakeetOverlayRecorder.start()) {
                             parakeetOverlayRecorder = null;
                             Toast.makeText(mContext, R.string.parakeet_start_failed, Toast.LENGTH_SHORT).show();

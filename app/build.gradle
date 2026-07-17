@@ -36,6 +36,14 @@ android {
         versionCode 38
         versionName "3.8"
 
+        ndk {
+            abiFilters "arm64-v8a", "armeabi-v7a"
+        }
+        externalNativeBuild {
+            cmake {
+                arguments "-DANDROID_STL=c++_shared"
+            }
+        }
     }
 
     def releaseKeystorePath = System.getenv("KEYSTORE_FILE")
@@ -76,7 +84,11 @@ android {
         }
     }
 
-    // Removed externalNativeBuild block
+    externalNativeBuild {
+        cmake {
+            path "src/main/cpp/CMakeLists.txt"
+        }
+    }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
@@ -122,6 +134,10 @@ dependencies {
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1'
 
     implementation 'org.apache.commons:commons-compress:1.27.1'
+    // sherpa-onnx (k2-fsa) — offline NVIDIA Parakeet ASR. Static-link variant embeds onnxruntime in
+    // libsherpa-onnx-jni.so, so for arm64-v8a/armeabi-v7a there is NO libonnxruntime.so to collide with
+    // moonshine-voice/Microsoft ORT. Vendored AAR in app/libs (resolved via settings.gradle flatDir).
+    implementation(name: 'sherpa-onnx-static-link-onnxruntime-1.13.1', ext: 'aar')
     // Microsoft ORT must appear before moonshine-voice so merged libonnxruntime.so matches
     // libonnxruntime4j_jni.so (Parakeet). Pin 1.23.0 so OrtGetApiBase@VERS_1.23.0 matches moonshine-voice.
     implementation 'com.microsoft.onnxruntime:onnxruntime-android:1.23.0'
@@ -136,4 +152,14 @@ dependencies {
     implementation 'com.github.woheller69:FreeDroidWarn:+'
 }
 
-tasks.named('preBuild').configure { dependsOn('unpackMicrosoftOrtJni') }
+def rnnoiseDataFile = rootProject.file('third_party/rnnoise/src/rnnoise_data.c')
+tasks.register('ensureRnnoiseModel', Exec) {
+    workingDir rootProject.file('third_party/rnnoise')
+    commandLine 'sh', 'download_model.sh'
+    onlyIf { !rnnoiseDataFile.exists() }
+}
+
+tasks.named('preBuild').configure {
+    dependsOn('unpackMicrosoftOrtJni')
+    dependsOn('ensureRnnoiseModel')
+}
